@@ -1,2 +1,2 @@
 # SHANGRI_LA_LA
-This is my utopia
+Shangri_la_la is my utopia

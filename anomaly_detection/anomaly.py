@@ -13,12 +13,14 @@ import csv
 import cv2
 import numpy as np
 import numpy.random as rd
-
 import matplotlib.pyplot as plt
 import pandas as pd
 import scipy.spatial.distance as distances
 from sklearn.covariance import EllipticEnvelope
 from sklearn.datasets import load_boston
+
+# 自分のレポジトリから
+
 
 class AnomalyDetection():
 
@@ -104,50 +106,55 @@ class AnomalyDetection():
         print vector_norm
 
     def module4(self):
+        '''
+            入力された一次元配列からanomaly detectionを用いて外れ値を検出する
+        '''
 
         # get data
-        x1 = load_boston()['data'][:,[8,10]]
-        x2 = load_boston()['data'][:,[5,12]]
+        img = cv2.imread('../saliency_detection/image/pearl.png')
+        b,g,r = cv2.split(img) 
+        B,G,R = map(lambda x,y,z: x*1. - (y*1. + z*1.)/2., [b,g,r],[r,r,g],[g,b,b])
+        Y = (r*1. + g*1.)/2. - np.abs(r*1. - g*1.)/2. - b*1.
+        # 負の部分は0にする
+        R[R<0] = 0
+        G[G<0] = 0
+        B[B<0] = 0
+        Y[Y<0] = 0
+        rg = cv2.absdiff(R,G)
+        by = cv2.absdiff(B,Y)
+        img1 = rg
+        img2 = by
 
-        # print np.where(x1>=24)
-        # print x1[356:500,0]
+        rg, by = map(lambda x:x.reshape((len(b[0])*len(b[:,0]),1)),[rg,by])
+        data = np.hstack((rg,by))
+        data = data.astype(np.float64)
+        data = np.delete(data, range( 0,len(data[:,0]),2),0)
 
-        # minval,maxval,minloc,maxloc = cv2.minMaxLoc(x1)
-        # print maxval,maxloc,x1.shape
-        x1 = np.delete(x1,range(350,450),0)
-        # minval,maxval,minloc,maxloc = cv2.minMaxLoc(x1)
-        # print maxval,maxloc,x1.shape
-        # grid？
-        xx1, yy1 = np.meshgrid(np.linspace(-8, 28, 500), np.linspace(3, 40, 500))
-        xx2, yy2 = np.meshgrid(np.linspace(3, 10, 500), np.linspace(-5, 45, 500))
-        legend1 = {}
+        # grid
+        xx1, yy1 = np.meshgrid(np.linspace(-10, 300, 500), np.linspace(-10, 300, 500))
+        
+        # 学習して境界を求める # contamination大きくすると円は小さく
+        clf = EllipticEnvelope(support_fraction=1, contamination=0.01)
+        print 'data.shape =>',data.shape
+        print 'learning...'
+        clf.fit(data) #学習 # 0があるとだめっぽいかも
+        print 'complete learning!'
 
-
-        # 学習して境界を求める
-        clf = EllipticEnvelope()
-        # clf = EllipticEnvelope(support_fraction=1,contamination=0.261)
-
-        # 学習
-        clf.fit(x1)
-        # 学習した分類器に基づいてデータを分類
+        # 学習した分類器に基づいてデータを分類して楕円を描画
         z1 = clf.decision_function(np.c_[xx1.ravel(), yy1.ravel()])
-
-        # z1はグリッドの全ての座標の値を持ってる # xx1と同じ形にreshape
         z1 = z1.reshape(xx1.shape)
-        # 楕円の描画
-        legend1 = plt.contour(xx1,yy1,z1,levels=[0],linewidths=2,colors='r')
+        plt.contour(xx1,yy1,z1,levels=[0],linewidths=2,colors='r')
 
-        # x1全てをplotしてる
-        # plt.scatter(x1[:,0],x1[:,1],color= 'black')
-        # print np.where(x1>=24)
-        plt.scatter(x1[:,0],x1[:,1],color= 'black')
-        plt.title("Outlier detection on a real data set (boston housing)")
+        # plot
+        plt.scatter(data[:,0],data[:,1],color= 'black')
+        plt.title("Outlier detection")
         plt.xlim((xx1.min(), xx1.max()))
         plt.ylim((yy1.min(), yy1.max()))
-        # plt.pause(3)
-        plt.show()
+        plt.pause(.001)
+        # plt.show()
         
-
+        cv2.imshow('rg',img1/np.amax(img1))
+        cv2.imshow('by',img2/np.amax(img2))
 
 
 

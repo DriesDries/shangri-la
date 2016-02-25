@@ -211,7 +211,17 @@ class TestClass():
         plt.pause(-1)
         # f[0:10] = 
 
-    # def tests(self,img):
+    def split(self,img):
+        b,g,r = cv2.split(img)
+
+        n = np.zeros_like(b)
+        b = cv2.merge((b,n,n))
+        g = cv2.merge((n,g,n))
+        r = cv2.merge((n,n,r))
+        cv2.imshow('b',b)
+        cv2.imshow('g',g)
+        cv2.imshow('r',r)
+
 
 ################################################################################
 # メイン
@@ -221,8 +231,10 @@ if __name__ == '__main__':
 
     cls = TestClass()
 
-    cls.filter_1d()
-
+    # cls.filter_1d()
+    img = cv2.imread(sys.argv[1])
+    # cls.HarrisCorner(img)
+    cls.split(img)
 
     # read img
     # img = cv2.imread(sys.argv[1])

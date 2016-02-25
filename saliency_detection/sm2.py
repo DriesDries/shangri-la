@@ -90,9 +90,11 @@ class ConvolutionMatrix():
         '''
         pass
 
+
+
 class SaliencyMap():
 
-    def __init__(self): # print self.nameで使える
+    def __init__(self):
         
         '''Gabor Filer''' 
         self.k = 99 # odd
@@ -105,7 +107,6 @@ class SaliencyMap():
         self.GaborKernel_90  = cv2.getGaborKernel(self.ksize, self.sigma, 90, self.lambd,  self.gamma)
         self.GaborKernel_135  = cv2.getGaborKernel(self.ksize, self.sigma, 135, self.lambd,  self.gamma)       
 
-
     def saliency_map(self,img):
         '''
             入力された画像のSaliency Mapを求める
@@ -114,9 +115,9 @@ class SaliencyMap():
             param: CM   -> 各特徴毎の正規化されたCouspicuity Map(顕著性map)
         '''
         # Get Conspicuity Map of each features
-        IntensityCM = self.GetIntensityCM(img)
         ColorCM = self.GetColorCM(img)
         OrientationCM = self.GetOrientationCM(img)
+        IntensityCM = self.GetIntensityCM(img)
         
         # create Saliency Map
         SM = IntensityCM/3. + ColorCM/2. + OrientationCM/6.
@@ -131,11 +132,12 @@ class SaliencyMap():
         print 'SM_MAX',np.amax(SM)
         print 'CM_MAX',maxCMval
         
-        cv2.imshow('SrcImg',img)
-        cv2.imshow('IntensityCM',IntensityCM/maxCMval)
-        cv2.imshow('ColorCM',ColorCM/maxCMval)
-        cv2.imshow('OrientationCM',OrientationCM/maxCMval)
-        cv2.imshow('SaliencyMap',SM/np.amax(SM))
+        # cv2.imshow('SrcImg',img)
+        # cv2.imshow('IntensityCM',IntensityCM/np.amax(IntensityCM))        
+        # cv2.imshow('IntensityCM',IntensityCM/maxCMval)
+        cv2.imshow('ColorCM',ColorCM/np.amax(ColorCM))
+        # cv2.imshow('OrientationCM',OrientationCM/maxCMval)
+        # cv2.imshow('SaliencyMap',SM/np.amax(SM))
         #####################################
 
     def GetIntensityCM(self,img):
@@ -146,7 +148,7 @@ class SaliencyMap():
         '''
         # Get Intensity image # 出力はfloat
         IntensityImg = self.GetIntensityImg(img)
-
+        # IntensityImg = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
         # Create Gaussian pyramid　# [0]が元画像
         IntensityPyr  = self.GauPyr(IntensityImg) 
 
@@ -154,7 +156,16 @@ class SaliencyMap():
         IntensityFM  = self.GetFM(IntensityPyr) 
 
         # Get Conspicuity Map
-        IntensityCM     = self.GetCM(IntensityFM) 
+        print 'getintensitycm'
+        IntensityCM = self.GetCM(IntensityFM) 
+
+        cv2.imshow('IntensityImg',IntensityImg/np.amax(IntensityImg))
+        # for i in range(0,4):
+            # print 'max_intensityFM',np.amax(IntensityFM[i])
+            # cv2.imshow('intensityFM[%s]'%i,IntensityFM[i]/np.amax(IntensityFM[0]))
+
+
+
 
         return IntensityCM
 
@@ -169,10 +180,30 @@ class SaliencyMap():
 
         # Create Gaussian Pyramids of each colors
         RPyr, GPyr, BPyr, YPyr = map(lambda x:self.GauPyr(x),[R,G,B,Y])
+        
+        # cv2.imshow('R',R/np.amax(R))
+        # cv2.imshow('G',G/np.amax(G))
+        # cv2.imshow('B',B/np.amax(B))
+        # cv2.imshow('Y',Y.astype(np.uint8))
+        # cv2.imshow('R',R/np.amax(R))
+        # cv2.imshow('G',G/np.amax(G))
+        # cv2.imshow('B',B/np.amax(B))
+        # cv2.imshow('Y',Y/np.amax(Y))
+
+
         # Get Feature Maps of RG & BY
         RGFM = self.GetColorFM(RPyr,GPyr)
         BYFM = self.GetColorFM(BPyr,YPyr)
-        
+        print np.amax(RGFM[0])
+        print np.amax(BYFM[0])
+
+        for i in range(6):
+            # cv2.imshow('RGFM%s'%i,RGFM[i]/np.amax(RGFM[i]))
+            pass
+
+        # cv2.imshow('R-G',RGFM[0]/np.amax(RGFM[0]))
+        # cv2.imshow('B-Y',BYFM[0]/np.amax(RGFM[0]))
+        # cv2.imshow('rg',RGFM[5]/np.amax(RGFM[5]))
         # cv2.imshow('R',RPyr[6]/np.amax(RPyr[0]))
         # cv2.imshow('G',GPyr[6]/np.amax(RPyr[0]))
 
@@ -184,6 +215,11 @@ class SaliencyMap():
         RGCM = self.GetCM(RGFM)
         BYCM = self.GetCM(BYFM)
         ColorCM = RGCM + BYCM
+        print np.amax(RGCM)
+        print np.amax(BYCM)
+        # cv2.imshow('RGCM',RGCM/np.amax(RGCM))
+        # cv2.imshow('BYCM',BYCM/np.amax(RGCM))
+
 
         return ColorCM
 
@@ -359,14 +395,13 @@ class SaliencyMap():
         # 画像を正規化して，それぞれ足し合わせる
         for i in range(0,6):
             FM0to1 = self.RangeNormalize0to1(FM[i]) # 0-1となる正規化
-            AveLocalMax = self.GetAveMaxima(FM0to1) # 局所的な極大値の平均値 0.4前後
+            AveLocalMax = self.GetAveMaxima(FM0to1)
             normalizedFM[i] = FM0to1 * (1-AveLocalMax)**2 #FM x 0.3前後
             
             CM = CM + normalizedFM[i]
-            # print AveLocalMax
-            # print np.amax(FM0to1)
-            # cv2.imshow('FM%s'%i,FM[i]/np.amax(FM[i]))
-            # cv2.imshow('normalizedFM%s'%i,normalizedFM[i]/np.amax(FM0to1))        
+            print 'AveLocalMax%s'%i,AveLocalMax
+            # cv2.imshow('FM%s'%i,FM[i]/np.amax(FM[0]))
+            # cv2.imshow('normalizedFM%s'%i,normalizedFM[i])        
         return CM
         
     def RangeNormalize0to1(self,img):
@@ -521,7 +556,7 @@ if __name__ == '__main__':
               +'    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!'
         sys.exit()
     img = cv2.resize(img,(512,512))
-    # img =255 - img
+    # img[np.sum(img,axis=2)==0] = 255
     ################################
     # kernelをグラフで表示
     # SM.ViewImage(img)

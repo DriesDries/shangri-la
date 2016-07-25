@@ -79,7 +79,10 @@ class RockDetection():
         return ror
 
     def get_seed(self,ori_sm,thresh):
-        
+        '''
+        入力された画像から種を求める
+        '''
+
         # 閾値処理と領域分割
         sm = copy.deepcopy(ori_sm)
         sm[sm < thresh] = 0

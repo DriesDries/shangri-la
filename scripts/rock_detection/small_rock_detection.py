@@ -41,15 +41,15 @@ class RockDetection():
 
         img = copy.deepcopy(src)        
 
-        '''Seed Acquisition by Viola-Jones'''
+        # Seed Acquisition by Viola-Jones
         vjmaps = vj.vj_main(img, self.scale, direction) 
-        seed_img, seed_list, scale = vj.select(vjmaps,self.thresh) # seed_listはy,x　多行二列
+        seed_img, seed_list, scale = vj.get_seed(vjmaps,self.thresh) # listはy,x
         print 'small seed number = ',len(seed_list)
 
-        '''Region Growing'''
+        # Region Growing Algolithm
         ror, bil_img = rgrow.rg_vj(src, np.array(seed_list), seed_img, scale, self.scale)
 
-        '''display results'''###########################################################
+        # display result ##########################################################
         # cv2.imshow('src',src)
         
         # cv2.imshow('seed',display_result((img*0.8).astype(np.uint8),seed_img,'fill','r'))
@@ -58,9 +58,9 @@ class RockDetection():
         cv2.imshow('result', display_result(result, seed_img, 'fill','g'))
 
         # cv2.imshow('img',img)
-        ################################################################################
+        ############################################################################
 
-        # return ror
+        return ror
 
 class ViolaJones():
 
@@ -110,7 +110,7 @@ class ViolaJones():
                     value.append(img[j,i])
         return vj_list, value
 
-    def select(self, vjmaps, thresh):
+    def get_seed(self, vjmaps, thresh):
         '''
         vjmapsから，種を選択する
         seed_imgとseed_listとそれぞれのscaleを返す
@@ -131,20 +131,12 @@ class ViolaJones():
                 scale[i,j]  = np.argmax(vjmaps[:,i,j]) # そのときのスケールが入る
 
         # 各領域の最大値を求める，これが種になる
-        seed_img, _ = detect_maxima(maxima, 0) # listを求めるのは余計な処理
+        # seed_img, _ = detect_maxima(maxima, 0) # sano_algo,極大値
+        seed_img = self.get_maxima(maxima) #各領域の最大値を求める
 
-        # for i in range(0,10,1):
-        #     # scale2 = copy.deepcopy(scale)
-        #     scale2 = np.zeros_like(scale)
-        #     scale2[scale==i]=255
-        #     scale2[seed_img==0]=0
-        #     cv2.imshow('scale',display_result((img*0.8).astype(np.uint8),scale2,'fill','g'))
-        #     # cv2.imshow('scale',scale2)
-        #     cv2.waitKey(0)
-        
         # この処理をするとseedにvjmapsの値が入る
-        maxima[seed_img!=255] = 0
-        seed_img = maxima
+        # maxima[seed_img!=255] = 0
+        # seed_img = maxima
 
         # imgをlistにする
         seed_list, value = self.img2list(seed_img)
@@ -165,6 +157,35 @@ class ViolaJones():
         '''
 
         return seed_img, seed_list2, scale
+
+    def get_maxima(self, src):
+        '''
+        入力された画像から種を求める
+        '''
+
+        img = copy.deepcopy(src)
+        img[img!=0] = 255
+        labels, num = sk.label(img, return_num = True) 
+
+        seed_list = []
+        seed_img = np.zeros_like(src)
+        
+        # 各領域の最大値を求める
+        for i in range(1,num+1):
+            
+            # iの領域だけ残す
+            img = copy.deepcopy(src) # 初期に戻す
+            img[labels!=i] = 0 # これで残った領域の最大値求める
+            
+            # 最大値を求める
+            y = np.argmax(img)/len(img)
+            x = np.argmax(img)%len(img)
+
+            if img[y,x] != 0: # 中に空いた穴じゃなければ種にする
+                seed_img[y,x] = src[y,x]
+                # seed_list.append([y,x])
+        
+        return seed_img
 
 class RegionGrowing():
     
@@ -189,25 +210,20 @@ class RegionGrowing():
             dst  : region_map   -> 領域が255,他が0の1ch画像
                    masked_img   -> srcにmaskを重ねた画像
             param:      -> 
-        
-        # bilateralFilterについて
-        sigmacolorが大きいと、色がより均一になる,sigmaspaceが大きいと、より遠くのピクセルまで巻き込む
-        dは処理するときに見るピクセルの直径
-        '''
-        
+        '''        
+
         rors = np.zeros_like(cv2.cvtColor(src,cv2.COLOR_BGR2GRAY)).astype(np.uint8)
 
         img = copy.deepcopy(src)
-        img = self.preprocessing(img) # 前処理
-        img = cv2.cvtColor(src, cv2.COLOR_BGR2GRAY).astype(np.uint16)
+        # img = self.preprocessing(img) # エッジがよく強調されない
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY).astype(np.uint16)
 
         # フィルタごとのgaussian imageの用意
         gauimgs = em.gau_function(scale_number) # 0-1に正規化,float64
 
         for i, y, x in zip( range(len(seed_list[:,0])) , seed_list[:,0], seed_list[:,1]):
-            # print '%s'%(i+1),'/%s'%len(seed_list[:,0]),'個目 x=',x,'y=',y            
+            print '%s'%(i+1),'/%s'%len(seed_list[:,0]),'個目 x=',x,'y=',y            
             if rors[y,x] == 0: # 新たな種
-             # if scale[y,x]>=2:
                 ror = self.growing_vj(img, x, y, gauimgs[scale[y,x]]) 
                 rors[ror==255] = 255 # rener rors
                 # cv2.imshow('growing',rors)
@@ -284,8 +300,26 @@ class RegionGrowing():
 
         return region_map
 
-    def preprocessing(self,img):
-        pass
+    def preprocessing(self,src):
+        '''
+            領域拡張する前処理
+        cv2.bilateralFilter
+        d(diameter)-> 処理時に考慮するピクセルの数(直径)
+        sigmacolor -> 色がより均一になる
+        sigmaspace -> より広範囲のpixelまで効果が及ぶ
+
+        '''
+        img = copy.deepcopy(src)
+
+        for i in range(5):
+            print i 
+            img = cv2.bilateralFilter(img, d=5, sigmaColor=15, sigmaSpace=15)
+            cv2.imshow('img',img)
+            cv2.waitKey(0)
+
+        return img
+
+
 
 class EnergyMinimization():
 
@@ -563,7 +597,7 @@ def detect_maxima(src,thresh):
 
         maxima_list = np.array(Map)
 
-        return maps,maxima_list
+        return maps
 
 '''read class'''
 rd = RockDetection()
@@ -574,14 +608,14 @@ em = EnergyMinimization()
 
 if __name__ == '__main__':
 
-    ''' Image Acquisition '''
+    # get image
     # img = cv2.resize(cv2.imread('../../../image/rock/spiritsol118navcam.jpg'),(512,512))
     # img = cv2.resize(cv2.imread('../../../image/rock/sol729.jpg'),(512,512))
     # img = cv2.resize(cv2.imread('../../../image/rock/11.png'),(512,512))
     img = cv2.imread('../../../image/rock/spiritsol118navcam.jpg')
     img = img[400:800,400:800]
 
-    ''' Main Processing '''
+    # main processing
     main(img, np.pi)
 
     cv2.waitKey(-1)

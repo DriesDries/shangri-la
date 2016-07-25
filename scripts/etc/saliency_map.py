@@ -116,8 +116,8 @@ class SaliencyMap():
         '''
         # Get Conspicuity Map of each features
         ColorCM = self.GetColorCM(img)
-        OrientationCM = self.GetOrientationCM(img)
         IntensityCM = self.GetIntensityCM(img)
+        OrientationCM = self.GetOrientationCM(img)
 
 
         # create Saliency Map
@@ -186,12 +186,14 @@ class SaliencyMap():
         # Get each Color images # 出力はfloat
         R,G,B,Y = self.GetRGBY(img) # float #ok
 
+
         # Create Gaussian Pyramids of each colors
         RPyr, GPyr, BPyr, YPyr = map(lambda x:self.GauPyr(x),[R,G,B,Y])
         
-        # cv2.imshow('R',R/np.amax(R))
-        # cv2.imshow('G',G/np.amax(G))
-        # cv2.imshow('B',B/np.amax(B))
+        cv2.imshow('R',R/np.amax(R))
+        cv2.imshow('G',G/np.amax(G))
+        cv2.imshow('B',B/np.amax(B))
+        print 'max',np.amax(B)
         # cv2.imshow('Y',Y.astype(np.uint8))
         # cv2.imshow('R',R/np.amax(R))
         # cv2.imshow('G',G/np.amax(G))
@@ -276,14 +278,14 @@ class SaliencyMap():
         IntensityImg = b/3. + g/3. + r/3.
         print 'rgb',np.amax(IntensityImg)
         R,G,B,Y = self.GetRGBY(img) # float #ok
-        IntensityImg = R
+        # IntensityImg = r
         print 'r',np.amax(IntensityImg)
         
         ### display results #####################################
-        cv2.imshow('intensity',IntensityImg)
-        cv2.imshow('r',R)
-        cv2.imshow('g',G)
-        cv2.imshow('b',B)
+        # cv2.imshow('intensity',IntensityImg/np.amax(IntensityImg))
+        # cv2.imshow('r',R/np.amax(R))
+        # cv2.imshow('g',G/np.amax(G))
+        # cv2.imshow('b',B/np.amax(B))
         #########################################################
 
         return IntensityImg
@@ -412,7 +414,7 @@ class SaliencyMap():
             FM0to1 = self.RangeNormalize0to1(FM[i]) # 0-1となる正規化
             AveLocalMax = self.GetAveMaxima(FM0to1)
             normalizedFM[i] = FM0to1 * (1-AveLocalMax)**2 #FM x 0.3前後
-            cv2.imshow('IntensityNormalized%s'%i,normalizedFM[i])            
+            # cv2.imshow('IntensityNormalized%s'%i,normalizedFM[i])            
             CM = CM + normalizedFM[i]
 
             # print 'AveLocalMax%s'%i,AveLocalMax
@@ -564,8 +566,9 @@ if __name__ == '__main__':
 
 
     ### get image #################
-    src = sys.argv[1]
-    img = cv2.imread(src)
+    # src = sys.argv[1]
+    # img = cv2.imread(src)
+    img = cv2.imread('../../image/rock/sol729.jpg')
     if img is None:
         print  '    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n'\
               +'    !!!!!!There is not %s'%src + '!!!!!!!!\n'\

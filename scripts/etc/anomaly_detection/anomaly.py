@@ -57,7 +57,7 @@ class AnomalyDetection():
         axs[0].set_xlim(-5,145)
         axs[0].set_xlabel('time',size=12)
 
-        # plt.pause(3)
+        plt.pause(3)
         plt.show()
 
     def module2(self,img):
@@ -114,6 +114,7 @@ class AnomalyDetection():
         img = cv2.imread('../saliency_detection/image/pearl.png')
         b,g,r = cv2.split(img) 
         B,G,R = map(lambda x,y,z: x*1. - (y*1. + z*1.)/2., [b,g,r],[r,r,g],[g,b,b])
+
         Y = (r*1. + g*1.)/2. - np.abs(r*1. - g*1.)/2. - b*1.
         # 負の部分は0にする
         R[R<0] = 0

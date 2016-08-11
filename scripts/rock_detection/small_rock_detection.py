@@ -45,7 +45,7 @@ class RockDetection():
         vjmaps = vj.vj_main(img, self.scale, direction) 
         seed_img, seed_list, scale = vj.get_seed(vjmaps,self.thresh) # listはy,x
         print 'small seed number = ',len(seed_list)
-
+        
         # Region Growing Algolithm
         ror, bil_img = rgrow.rg_vj(src, np.array(seed_list), seed_img, scale, self.scale)
 
@@ -80,11 +80,13 @@ class ViolaJones():
         vjmaps = range(len(scales))  
 
         # kernelの準備
-        kernels = map(lambda x:cv2.getGaborKernel(ksize = (x,x), sigma = 5,theta = direction, lambd = x*1, gamma = 25./x, psi = np.pi * 1/2), scales)
+        kernels = map(lambda x:cv2.getGaborKernel(ksize = (x,x), sigma = 5,theta = direction, lambd = x, gamma = 25./x, psi = np.pi * 1/2), scales)
+
 
         # filtering # kernelの大きさによる正規化
         vjmaps = map(lambda x:cv2.filter2D(img, cv2.CV_64F, x),kernels)
         vjmaps = map(lambda x:vjmaps[x]/(scales[x]**2),range(len(scales))) 
+
 
         # すべてのvjmapsを通して0-255で正規化
         vjmaps = cv2.normalize(np.array(vjmaps), 0, 255, norm_type = cv2.NORM_MINMAX)
@@ -94,9 +96,7 @@ class ViolaJones():
 
     def img2list(self,img):
         ''' 
-
         画像で非0の座標をlistに
-
 
         '''
         vj_list = []
@@ -220,14 +220,22 @@ class RegionGrowing():
 
         # フィルタごとのgaussian imageの用意
         gauimgs = em.gau_function(scale_number) # 0-1に正規化,float64
-
-        for i, y, x in zip( range(len(seed_list[:,0])) , seed_list[:,0], seed_list[:,1]):
-            print '%s'%(i+1),'/%s'%len(seed_list[:,0]),'個目 x=',x,'y=',y            
+        count = 0
+        for s in range(10):
+         for i, y, x in zip( range(len(seed_list[:,0])) , seed_list[:,0], seed_list[:,1]):
+            # print '%s'%(i+1),'/%s'%len(seed_list[:,0]),'個目 x=',x,'y=',y            
             if rors[y,x] == 0: # 新たな種
+             if scale[y,x]==s:
+                count += 1
                 ror = self.growing_vj(img, x, y, gauimgs[scale[y,x]]) 
                 rors[ror==255] = 255 # rener rors
-                # cv2.imshow('growing',rors)
-                # cv2.waitKey(0)
+         
+         # 以下いらない
+         # print count
+         # count = 0
+         # cv2.imshow('growing', display_result(src,rors,'fill','r'))
+         # cv2.waitKey(0)
+         # rors = np.zeros_like(cv2.cvtColor(src,cv2.COLOR_BGR2GRAY)).astype(np.uint8)
 
         return rors, img
 
@@ -283,8 +291,9 @@ class RegionGrowing():
              
                 ''' 領域拡張条件 '''
                 E1 = gau * abs(light_ave - img[v,u])
-                E2 = gau * abs(shade_ave - img[v,u])
-                if 10 > E1 or 10 > E2:
+                # E2 = gau * abs(shade_ave - img[v,u])
+                # if 10 > E1 or 10 > E2:
+                if 10 > E1 :
                 
                     # renew region map
                     if region_map[v,u] == 0: # 新しい種だった場合
@@ -318,8 +327,6 @@ class RegionGrowing():
             cv2.waitKey(0)
 
         return img
-
-
 
 class EnergyMinimization():
 
@@ -598,6 +605,35 @@ def detect_maxima(src,thresh):
         maxima_list = np.array(Map)
 
         return maps
+
+def display_3D(img):
+    '''
+        入力画像を3Dで表示する
+        args: 1ch image
+    '''
+    # データの準備
+    x = np.arange(0, len(img[0]), 1)
+    y = np.arange(0, len(img[1]), 1)
+    X, Y = np.meshgrid(x, y) 
+    Z = img
+
+    # plot
+    fig = plt.figure()
+    ax = Axes3D(fig)
+    ax.plot_wireframe(X,Y,Z)
+
+    # 設定
+    ax.set_xlabel('pixel')
+    ax.set_ylabel('pixel')        
+    ax.set_zlabel('intensity')
+    # ax.set_zlim(0, 300)
+    ax.set_title('Image')
+    ax.plot_surface(X, Y, Z, rstride=10, cstride=10, cmap = 'jet',linewidth=0)
+    # ax.plot_wireframe(X,Y,Z, cmap = 'Greys', rstride=10, cstride=10)
+
+    plt.pause(.001) # これだけでok
+    # plt.show()
+
 
 '''read class'''
 rd = RockDetection()

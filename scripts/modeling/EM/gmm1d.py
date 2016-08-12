@@ -1,15 +1,14 @@
 # -*- coding: utf-8 -*-
 '''
-
 一次元の特徴量に対して、EM法(Expectation–Maximization Algorithm)
 を用いて、混合ガウス分布をモデリングする
-Usage: $ python modling.py <argv>
-         modeling.main(data,N)
+Usage: $ python gmm1d.py <argv>
 
-・対数尤度あってるのか？
-・BICの実装
-・統合
-
+・繰り返し処理が見れるようにする -> 無理っぽい？
+・対数尤度を求める -> なんか値がおかしい？
+・システムに統合する
+・covariance_typeを決める
+・オンラインEMアルゴリズムを実装する
 ''' 
 
 import time
@@ -24,11 +23,10 @@ import pylab
 from sklearn import mixture
 
 
-def main(data, N):
-    score = em(data, N=10)    
-    return score
+def main(data,N):
+    em(data, N=10)    
 
-def em(data, N):
+def em(data,N):
     '''
         混合ガウス分布を用いてdataをモデリングする
         args : data    -> モデリングしたいデータ
@@ -51,8 +49,8 @@ def em(data, N):
     x = np.linspace(start=min(data[:,0]), stop=max(data[:,0]), num=1000)
     y = 0
     fig = plt.figure(figsize=(15,8))
-    ax1 = fig.add_subplot(111)
-    # ax2 = fig.add_subplot(212)
+    ax1 = fig.add_subplot(211)
+    ax2 = fig.add_subplot(212)
 
 
     ps = range(N)
@@ -164,7 +162,7 @@ def get_data(dim):
         csvファイルから配列を生成して返す
     '''
 
-    sam = open('./data/old_faithful.csv', 'r')
+    sam = open('../data/old_faithful.csv', 'r')
     reader = csv.reader(sam, delimiter=' ')
 
     data = []
@@ -185,7 +183,6 @@ if __name__ == '__main__':
 
     data = get_data(dim=2)
     start = time.time()
-    score = main(data=data, N=5)
+    main(data=data, N=5)
     print time.time()-start
-    print 'log likelihood = {}'.format(score)
     plt.show()

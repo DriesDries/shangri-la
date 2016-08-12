@@ -18,21 +18,16 @@ import pylab
 
 def main():
 
-    '''単峰型のガウシアン分布 the unimodal gaussian distribution '''
-    # data = generate_ugd(mu=3.0, var=2.0, N=10000)
-    # mle_ugd(data)
-
     '''fitting to the bimodal gaussian distribution '''
     data = get_bgd()
     ema_bgd(data)
-    ema
 
 def get_bgd():
     '''
         csvファイルから配列を生成して返す
     '''
 
-    sam = open('./old_faithful.csv', 'r')
+    sam = open('../data/old_faithful.csv', 'r')
     reader = csv.reader(sam, delimiter=' ')
 
     # data = np.array([])
@@ -79,7 +74,7 @@ def ema_bgd(data):
         burden_rates = e_step(xs=data, ms=ms, vs=vs, pi=pi) # Eステップ
         ms, vs, pi = m_step(xs=data, burden_rates=burden_rates) # Mステップ
         ls.append(calc_log_likelihood(data, ms, vs, pi)) # 対数尤度を更新する
-        
+        print ls[i]
         # 描画
         xs = np.linspace(min(data), max(data), 200)
         norm1 = mlab.normpdf(xs, ms[0], math.sqrt(vs[0]))
@@ -91,10 +86,11 @@ def ema_bgd(data):
 
         ax2.plot(np.arange(len(ls)), ls, color='dodgerblue')        
 
-        if (ls[i] - ls[i-1])<=1 and i>5:
+        if i==T-1: # 収束条件
+            print i
             ax1.plot(xs, (1 - pi) * norm1 + pi * norm2, color="red", lw=3)
-            [ax1.lines.pop(0) for i in range(2)] # remove line 
-            print 'fin'
+            [ax1.lines.pop(0) for l in range(2)] # remove line 
+            print '...Converge in the {}th...'.format(i+1)
             plt.pause(-1)
             break
 

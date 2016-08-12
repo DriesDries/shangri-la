@@ -13,6 +13,7 @@ import rock_detection.small_rock_detection as srd
 import rock_detection.large_rock_detection as lrd
 import feature_extraction.feature_extraction as fe
 import modeling.modeling as md
+import anomaly_detection.anomaly_detection as ad
 
 def main(src):
     '''
@@ -26,13 +27,13 @@ def main(src):
     s_ror = srd.main(img,np.pi)    ; print 'srd'
     l_ror = lrd.main(img)          ; print 'lrd'
     ror = merge.main(s_ror,l_ror)  ; print 'merge'
+    features = fe.main(src, s_ror) ; print 'fe'
+    model = md.main(features)      ; print 'modeling'
+    # target = ad.main(model)        ; print 'ad'
 
-    # features = fe.main(src, s_ror) ; print 'fe'
-    # model = md.main(features)      ; print 'modeilng'
-
-    cv2.imshow('s_ror',s_ror)
-    cv2.imshow('l_ror',l_ror)
-    cv2.imshow('ror',ror)
+    # cv2.imshow('s_ror',s_ror)
+    # cv2.imshow('l_ror',l_ror)
+    # cv2.imshow('ror',ror)
 
 
 def display_result(self,img,mask,format,color):

@@ -1,14 +1,11 @@
 # -*- coding: utf-8 -*-
 '''
-小さい岩と大きい岩の結合
-Usage: $ python template.py <argv>
+小さい岩領域と大きい岩領域の結合
+Usage: $ python merge.py <argv>
 ''' 
 
 import cv2
 import numpy as np
-import matplotlib.pyplot as plt
-import os
-import sys
 
 def main(img1,img2):
     ror = merge(img1,img2)
@@ -32,17 +29,19 @@ def merge(img1,img2):
     ror[img1!=0] = 255
     ror[img2!=0] = 255
 
+    cv2.imshow('img',ror)
+
     return ror
 
 
 
 if __name__ == '__main__':
 
-    img1 = cv2.imread('../../image/rock/sample1.png',0)
-    img2 = cv2.imread('../../image/rock/sample2.png')
+    img1 = cv2.imread('../../../image/sample/sample1.png')
+    img2 = cv2.imread('../../../image/sample/sample2.png')
+    img = cv2.imread('../../../data/g-t_data/resized/spirit118-1.png')
 
     main(img1,img2)
-
 
     cv2.waitKey(-1)
     

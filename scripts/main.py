@@ -17,24 +17,24 @@ import anomaly_detection.anomaly_detection as ad
 
 def main(src):
     '''
-        処理の概要
-        args :      -> 
-        dst  :      -> 
-        param:      -> 
+        args : src     ->  3ch-image
+        dst  : model   ->  model
+               target  ->  taeget
+        param:         -> 
     '''
     img = copy.deepcopy(src)
 
     s_ror = srd.main(img,np.pi)    ; print 'srd'
-    l_ror = lrd.main(img)          ; print 'lrd'
-    ror = merge.main(s_ror,l_ror)  ; print 'merge'
-    features = fe.main(src, s_ror) ; print 'fe'
-    model = md.main(features)      ; print 'modeling'
+    # l_ror = lrd.main(img)          ; print 'lrd'
+    # ror = merge.main(s_ror,l_ror)  ; print 'merge'
+
+    # features = fe.main(src, s_ror) ; print 'fe'
+    # model = md.main(features)      ; print 'modeling'
     # target = ad.main(model)        ; print 'ad'
 
-    # cv2.imshow('s_ror',s_ror)
+    cv2.imshow('s_ror',s_ror) 
     # cv2.imshow('l_ror',l_ror)
     # cv2.imshow('ror',ror)
-
 
 def display_result(self,img,mask,format,color):
     '''
@@ -108,21 +108,10 @@ def display_result(self,img,mask,format,color):
 
 if __name__ == '__main__':
 
-    # img = cv2.resize(cv2.imread('../../image/rock/spiritsol118navcam.jpg'),(512,512))
-    # img = cv2.resize(cv2.imread('../../image/rock/sol729.jpg'),(512,512))
-    # img = cv2.resize(cv2.imread('../../image/rock/11.png'),(512,512))
-    img = cv2.imread('../../image/rock/spiritsol118navcam.jpg')
-    img = img[400:800,400:800]        
+    img = cv2.imread('../../../data/g-t_data/resized/spirit118-1.png')
 
     main(img)
 
     cv2.waitKey(-1)
     
 
-
-
-    # インスタンスメソッド
-    # クラスメソッドではクラス変数にアクセスできる
-    # じゃあインスタンス変数のある意味は、メモリとかの問題なのか？
-    # インスタンス変数とクラス変数の対応関係は、ローカル変数とグローバルと同じなのか？
-    # インスタンス変数とクラス変数の対応関係は、メソッド間での継承とクラス間での継承みたいなイメージなのか？

@@ -14,10 +14,6 @@ import skimage.measure as sk
 import skimage.segmentation as skseg
 import scipy.stats as st
 
-# import scipy.ndimage as nd
-# from scipy import misc
-# from scipy import signal
-
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from mpl_toolkits.mplot3d import Axes3D
@@ -553,118 +549,6 @@ class etc():
 
         maxima_list = np.rot90(seeds)
         return maxima_img, maxima_list
-    def detect_maxima(self,src,thresh):
-        
-        # colorだったらgrayに変換
-        if len(src.shape) == 3:
-            src=cv2.cvtColor(src,cv2.COLOR_BGR2GRAY)
-        src_gray=np.asarray(copy.deepcopy(src))
-
-        src_gray[src_gray<thresh] = 0 # 閾値処理
-
-        gray_shifted = src_gray[0:src_gray.shape[0],0:-1:]
-        zero_comp_ver = np.zeros((src_gray.shape[0],1))
-        zero_comp_ver = zero_comp_ver.astype(np.int16)
-        right_img= np.append(zero_comp_ver,gray_shifted,1)
-        right_img= np.asarray(right_img)
-
-        gray_shifted = src_gray[0:src_gray.shape[0],1::]
-        left_img= np.append(gray_shifted,zero_comp_ver,1)
-        left_img = np.asarray(left_img)
-
-        gray_shifted = src_gray[1:src_gray.shape[0],0::]
-        zero_comp_holi = np.zeros((1,src_gray.shape[1]))
-        zero_comp_holi = zero_comp_holi.astype(np.int16)
-        up_img = np.append(gray_shifted,zero_comp_holi,0)
-        up_img = np.asarray(up_img)
-
-        gray_shifted = src_gray[0:src_gray.shape[0]-1,0::]
-        down_img = np.append(zero_comp_holi,gray_shifted,0)
-        down_img = np.asarray(down_img)
-
-        right_img = right_img.astype(np.int16)
-        left_img = left_img.astype(np.int16)
-        up_img = up_img.astype(np.int16)
-        down_img = down_img.astype(np.int16)
-        src_gray = src_gray.astype(np.int16)
-        '''
-        グレー元画像とシフト画像との差分
-        '''
-        sub_right_img=src_gray-right_img
-        sub_left_img=src_gray-left_img
-        sub_up_img=src_gray-up_img
-        sub_down_img=src_gray-down_img
-
-        k=0
-        #Map=np.zeros((src_gray.shape[0]*src_gray.shape[1],2))
-        '''
-        返り値の用意
-        '''
-        Map=[]
-        #print (sub_right_img.dtype)
-        maps = np.zeros_like(src_gray)
-        #print (maps.dtype)
-        '''
-        極値の探索
-        line88,105,123,140のレンジの第２要素目の+1の必要性を吟味
-        '''
-
-        for i in range(0,src_gray.shape[0]):
-            for j in range(0,src_gray.shape[1]):
-
-                # 上下左右のすべてより大きい場合
-                if sub_right_img[i,j]>0 and sub_left_img[i,j]>0 and sub_up_img[i,j]>0 and sub_down_img[i,j]>0:
-                    Map.append([i,j])
-                    maps[i,j] = 255
-                    k=k+1
-
-                # 横に続く場合
-                elif(sub_right_img[i,j]==0) and (sub_left_img[i,j]>0) and (sub_up_img[i,j]>0) and (sub_down_img[i,j]>0) :
-                    l=j-1
-
-                    while (l>0):
-
-                        if(sub_right_img[i,l]<0 or sub_up_img[i,l]<=0 or sub_down_img[i,l]<=0):
-
-                            break
-                        elif (sub_right_img[i,l]>0):
-                            for r in range(l,j+1):
-                                Map.append([i,r])
-                                maps[i,r]=255
-                                k=k+1
-                            break
-                        elif sub_right_img[i,l]==0:
-                            l = l-1
-
-                        else:
-                            break
-
-                # # 縦に続く場合
-                elif sub_right_img[i,j]>0 and sub_left_img[i,j]>0 and sub_up_img[i,j]==0 and sub_down_img[i,j]>0:
-                    l=i+1
-
-                    while (l<src_gray.shape[0]):
-                        if(sub_up_img[l,j]<0 or sub_right_img[l,j]<=0 or sub_left_img[l,j]<=0):
-                            break
-                        elif (sub_up_img[l,j]>0):
-                            for r in range(i,l+1):
-                                Map.append([r,j])
-                                maps[r,j]=255
-                                k=k+1
-                            break
-                        elif (sub_up_img[l,j]==0):
-                            l=l+1
-                        else:
-                            break
-                else:
-                    continue
-
-        maps = maps.astype(np.uint8)
-        # print 'seed number =',k
-
-        maxima_list = np.array(Map)
-
-        return maps,maxima_list
 
 '''Read Class'''
 rd = RockDetection()
@@ -675,18 +559,11 @@ dd = DisplayData()
 
 if __name__ == '__main__':
 
-    # Image Acquisition
-    # img = cv2.resize(cv2.imread('../../../image/rock/spiritsol118navcam.jpg'),(512,512))
-    # img = cv2.resize(cv2.imread('../../../image/rock/sol729.jpg'),(512,512))
-    # img = cv2.resize(cv2.imread('../../../image/rock/11.png'),(512,512))
-    img = cv2.imread('../../../image/rock/spiritsol118navcam.jpg')
-    img = img[400:800,400:800]
+    ## Image acquisition
+    img = cv2.imread('../../../data/g-t_data/resized/spirit118-1.png')
 
     # main processing
     main(img)
 
     cv2.waitKey(-1)
     
-            # saliency mapをdilation and erosion
-        # sm = cv2.dilate(sm,cv2.getStructuringElement(cv2.MORPH_ELLIPSE, self.kernel_size))
-        # sm = cv2.erode(sm,cv2.getStructuringElement(cv2.MORPH_ELLIPSE, self.kernel_size))

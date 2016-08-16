@@ -8,11 +8,9 @@ Usage: $ python modling.py <argv>
 
 ・対数尤度あってるのか？
 ・BICの実装
-・統合
 
 ''' 
 
-import time
 import math
 import csv
 import random
@@ -25,10 +23,11 @@ from sklearn import mixture
 
 
 def main(data, N):
-    score = em(data, N=10)    
+    if N == None: N=10
+    score = expectation_maximization(data, N=10)    
     return score
 
-def em(data, N):
+def expectation_maximization(data, N):
     '''
         混合ガウス分布を用いてdataをモデリングする
         args : data    -> モデリングしたいデータ
@@ -40,8 +39,9 @@ def em(data, N):
                EM.means_     -> ガウス分布の平均(頂点の座標になる)、2変量ガウス分布だから2次元
                EM.converged_ -> 収束してればTrue
     '''
-    
-    data[:,1] = 0
+    # dataの形状を整える
+    data = data.reshape((data.shape[0], 1))
+    data = np.hstack((data,np.zeros_like(data)))
 
     # fitting
     EM = mixture.GMM(n_components=N, covariance_type='full',n_iter=100,verbose=0)
@@ -73,7 +73,6 @@ def em(data, N):
         
     return EM.score(data).sum()
 
-
 def histgram_3D(data):
     '''
     入力された二次元配列を3Dhistgramとして表示する
@@ -82,7 +81,6 @@ def histgram_3D(data):
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
     
-
     x = data[:,0]
     y = data[:,1]
 
@@ -183,9 +181,8 @@ def get_data(dim):
 
 if __name__ == '__main__':
 
-    data = get_data(dim=2)
-    start = time.time()
+    data = get_data(dim=1)
     score = main(data=data, N=5)
-    print time.time()-start
+
     print 'log likelihood = {}'.format(score)
     plt.show()

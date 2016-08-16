@@ -163,4 +163,4 @@ def display_contour(X,Y,Z):
 
 if __name__ == '__main__':
 
-    main( )
+    main()

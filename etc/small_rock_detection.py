@@ -1,27 +1,34 @@
 # -*- coding: utf-8 -*-
 '''
-Small Rock Detection based on Viola-Jones and Region Growing Algolithm
-Viola-Jones法に基づいて複数のスケールのカーネルによるテンプレートマッチングを行うことで、岩領域の抽出を行う。
-TMの結果に対して閾値処理を行い、その各領域から最大値とそのときに用いたテンプレートを求める。
-それらのピクセルを領域拡張法の種として、その種を中心としてテンプレートの大きさに基づいたガウス分布を展開し、
-エネルギー関数を導入し、定めたエネルギーの閾値よりも小さい場合は、隣のピクセルと結合する。
-エネルギー関数 E:
-用いたテンプレートのパラメータ:
+    Small Rock Detection based on Viola-Jones and Region Growing Algolithm
+    Viola-Jones法に基づいて複数のスケールのカーネルによるテンプレートマッチングを行うことで、岩領域の抽出を行う。
+    TMの結果に対して閾値処理を行い、その各領域から最大値とそのときに用いたテンプレートを求める。
+    それらのピクセルを領域拡張法の種として、その種を中心としてテンプレートの大きさに基づいたガウス分布を展開し、
+    エネルギー関数を導入し、定めたエネルギーの閾値よりも小さい場合は、隣のピクセルと結合する。
+    エネルギー関数 E:
+    用いたテンプレートのパラメータ:
 
+    Usage: $ python rock_detection.py
+    argv : Image -> 3ch画像
+    dst  : Region of Rocks Image -> 1ch image
 
-Usage: $ python rock_detection.py
-argv : Image -> 3ch画像
-dst  : Region of Rocks Image -> 1ch image
-
-・テンプレートマッチングにする
-    - スコアの正規化がいらない
-・カーネル最適化
-    - 大きさ、カーネルそのものを変更
-・類似度指標の変更
-・種の取得きれいに
-・gauimgの最適化
-・パラメータの最適化
-
+    Get seed
+        - 角度変えたフィルタを使う
+        - adptive thresholdを使う
+        - 種を選ぶための領域選択
+            - 重み付け変えてもいい
+            - 極大値選ぶ
+            - 　
+        - parameter tuning
+            - threshold
+            - sigma 3 ~ 5
+            - bias 0 ~ 0.2
+    
+    Region Growing
+        - texture
+        - 分散
+        - パラメータの最適化
+        - gauimgの最適化
 ''' 
 
 import time
@@ -36,11 +43,11 @@ import skimage.measure as sk
 import skimage.segmentation as skseg
 import scipy.stats as st
 
-def main(img, direction):
-    
-    ror = rd.small_rd(img, direction)
+def main(img, direction, thresh, sigma, bias):
 
-    return ror
+    seed_img = rd.small_rd(img, direction, thresh, sigma, bias)
+
+    return seed_img
 
 class RockDetection():
 
@@ -48,31 +55,49 @@ class RockDetection():
         
         self.min_size = 10        # 最小領域の大きさ  
         # self.sun_direction = np.pi
-        self.thresh = 160
+        # self.thresh = 160
         self.scale = 10 # いくつのカーネルを用いるか
 
-    def small_rd(self, src, direction):
-
+    def small_rd(self, src, direction, thresh, sigma, bias):
 
         img = copy.deepcopy(src)        
 
         # Seed Acquisition by Viola-Jones
-        vjmaps = vj.vj_main(img, direction, self.scale) 
-        seed_img, seed_list, scale_img = vj.get_seed(vjmaps,self.thresh) # listはy,x
-        
+        vjmaps, kernels = vj.vj_main(img, direction, self.scale, sigma, bias) 
+        seed_img, seed_list, scale_img = vj.get_seed(vjmaps, thresh) # listはy,x
+
+
         # Region Growing Algolithm
-        ror = rgrow.rg_vj(src, seed_list, seed_img, scale_img, self.scale)
+        # ror = rgrow.rg_vj(src, seed_list, seed_img, scale_img, self.scale)
 
         # display result ##########################################################
+        # print len(seed_list)
+        # for i in range(1,11):
+        #     kernel = kernels[i-1]+0.5
+        #     b,g,r = cv2.split(src * 0.8)
+        #     scale_img[seed_img==0]=100
+
+        #     r[seed_img!=0]  = 255
+        #     g[scale_img==i-1] = 255
+        #     b[scale_img==i-1] = 0
+        #     print 'scale = {}, quantity = {}'.format(kernel.shape,(scale_img==i-1).sum())
+        #     res = cv2.merge((b,g,r)).astype(np.uint8)
+        #     cv2.imshow('res',res)
+        #     cv2.imshow('kernel',kernel)
+        #     cv2.waitKey(-1)        
+
+        # cv2.imshow('ror',ror)
+        # cv2.imshow('seed_img',seed_img)
         # print 'small seed number = ',len(seed_list)
+
 
         ############################################################################
 
-        return ror
+        return seed_img
 
 class ViolaJones():
 
-    def vj_main(self, src, direction, scale):
+    def vj_main(self, src, direction, scale, sigma, bias):
         '''
         入力画像に複数のスケールのカーネルを用いてテンプレートマッチングを行う。
         そもそもfilterlingじゃなくてTMにする？
@@ -88,7 +113,27 @@ class ViolaJones():
         sizes = range(5, 2*scale+5, 2) # kernelのsize
 
         # kernelの準備
-        kernels = map(lambda x: cv2.getGaborKernel(ksize = (x,x), sigma = 5,theta = direction, lambd = x, gamma = 25./x, psi = np.pi * 1/2), sizes)
+        kernels = map(lambda x: cv2.getGaborKernel(ksize = (x,x), sigma = sigma,theta = direction, lambd = x, gamma = 25./x, psi = np.pi * 1/2), sizes)
+
+
+        for i,kernel in enumerate(kernels):
+            
+            # 正規化するとき
+            kernels[i] = 1. * kernel / np.amax(kernel) # Normalized from -1 to 1
+            
+            # bias使うとき
+            # l = kernel.shape[0]/2
+            # kernel[:,0:l] = 2. * kernel[:,0:l] / np.amax(kernel[:,0:l]) - bias
+            # kernels[i][:,0:l] = kernel[:,0:l]
+
+            # kernel[:,l+1:] = 2.* kernel[:,l+1:] / abs(np.amin(kernel[:,l+1:])) + bias
+            # kernels[i][:,l+1:] = kernel[:,l+1:]
+
+
+
+
+
+
 
         # filtering # kernelの大きさによる正規化
         vjmaps = map(lambda x:cv2.filter2D(img, cv2.CV_64F, x),kernels)
@@ -98,7 +143,7 @@ class ViolaJones():
         vjmaps = cv2.normalize(np.array(vjmaps), 0, 255, norm_type = cv2.NORM_MINMAX)
         vjmaps = vjmaps.astype(np.uint8)
 
-        return vjmaps
+        return vjmaps,kernels
 
     def get_seed(self, vjmaps, thresh):
         '''
@@ -109,20 +154,28 @@ class ViolaJones():
         seed_list   : seed_imgをlistにしたもの
         seed_list2  : 種が類似度の昇順で並んでるlistスケールが入ってるリスト
         scale       : seed_listに対応したそれぞれのkernelの
+        scale_img   : それぞれのピクセルの最も大きいscaleが入ってる
         '''
         
         # 閾値処理
         vjmaps[vjmaps<thresh]=0
-        
+
+        # for vjmap in vjmaps:
+            # cv2.imshow('vjmaps',vjmap)
+            # cv2.waitKey(-1)
+
         # 最大値とそのスケールが入る画像の用意
         maxima = np.zeros_like(vjmaps[0])
         scale_img  = np.zeros_like(vjmaps[0])
 
-        # 各座標の最大値抽出、その値とスケールを画像に入れる
+        # 各ピクセルの最大値抽出、その値とスケールを画像に入れる
         for i in range(vjmaps.shape[1]):
             for j in range(vjmaps.shape[2]):
                 maxima[i,j] = np.amax(vjmaps[:,i,j])   # 最大値が入る
                 scale_img[i,j]  = np.argmax(vjmaps[:,i,j]) # そのときのスケールが入る
+
+        # cv2.imshow('maxima',maxima)
+        # cv2.waitKey(-1)
 
         # seedの取得
         seed_img = self.get_maxima(maxima) # 各領域の最大値を求める
@@ -151,7 +204,6 @@ class ViolaJones():
         # 各領域にラベルをつける
         labels, num = sk.label(img, return_num = True) 
 
-        seed_list = []
         seed_img = np.zeros_like(src)
         
         # 各領域の最大値を求める
@@ -167,7 +219,6 @@ class ViolaJones():
 
             if img[y,x] != 0: # 中に空いた穴じゃなければ種にする
                 seed_img[y,x] = src[y,x]
-                # seed_list.append([y,x])
         
         return seed_img
 
@@ -335,6 +386,6 @@ if __name__ == '__main__':
     img = cv2.imread('../../../data/g-t_data/resized/spirit118-1.png')
 
     # main processing
-    main(img, np.pi)
+    main(img, np.pi, 150, 4, bias=0.2)
 
     cv2.waitKey(-1)

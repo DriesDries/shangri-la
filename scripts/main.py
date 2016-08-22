@@ -2,7 +2,7 @@
 '''
 Usage: $ python template.py <argv>
 ''' 
-
+ 
 import os, sys, time, copy
 
 import cv2
@@ -11,9 +11,12 @@ import numpy as np
 import rock_detection.merge as merge
 import rock_detection.small_rock_detection as srd
 import rock_detection.large_rock_detection as lrd
+import rock_detection.tm_eval as rd
 import feature_extraction.feature_extraction as fe
 import modeling.modeling as md
 import anomaly_detection.anomaly_detection as ad
+
+
 
 def main(src):
     '''

@@ -16,7 +16,6 @@ template = template.astype(np.float32)
 print np.amax(template),np.amin(template)
 # template = cv2.normalize(template, 0, 255, norm_type = cv2.NORM_MINMAX).astype(np.uint8)
 size = len(template)
-cv2.imshow('temp',template)
 
 w, h = template.shape[::-1]
 
@@ -24,8 +23,6 @@ w, h = template.shape[::-1]
             # 'cv2.TM_CCORR_NORMED', 'cv2.TM_SQDIFF', 'cv2.TM_SQDIFF_NORMED']
 methods = ['cv2.TM_CCOEFF', 'cv2.TM_CCOEFF_NORMED']
 methods = ['cv2.TM_CCOEFF_NORMED']
-
-
 
 for meth in methods: 
     method = eval(meth)
@@ -38,7 +35,7 @@ for meth in methods:
     mask = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
     b,g,r = cv2.split(mask)
     print meth
-    for th in range(180,125,-1):
+    for th in range(180,125,-5):
         for i in range(res.shape[0]):
             for j in range(res.shape[1]):
                 if res[i,j]>=th:
@@ -46,6 +43,7 @@ for meth in methods:
         print th
         # r[res>th] = 255
         mask = cv2.merge((b,g,r))
+        mask = mask.astype(np.uint8)
         cv2.imshow('{}'.format(meth),mask)
         cv2.waitKey(200)
 

@@ -186,15 +186,11 @@ def get_texton(responses):
 
 if __name__ == '__main__':
 
-    img = cv2.imread('../../../data/g-t_data/resized/spirit118-1.png')
-    # img = cv2.resize(img,(100,100))
+    # img = cv2.imread('../../../data/g-t_data/resized/spirit118-1.png')
+    rock = cv2.imread('../../../data/g-t_data/rock_region/spirit118-1.png')
+    soil = cv2.imread('../../../data/g-t_data/soil_region/spirit118-1.png')
 
-    # img = cv2.imread('../../../image/sample/image3.png')
-    # gimg = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
-    # print gimg.shape
-    # print img.shape,img.shape[0],img.shape[1],img[0].shape
-
-    main(img)
+    main(rock)
 
     cv2.waitKey(-1)
     

@@ -37,4 +37,23 @@ if __name__ == '__main__':
     img = img[400:800,400:800]
     # cv2.imshow('img',img)
     # cv2.waitKey(-1)
-    cv2.imwrite('../../data/g-t_data/resized/spirit050-2.png',img,[int(cv2.IMWRITE_JPEG_QUALITY), 0])
+
+
+    a = [1,2,3,4]
+    b = [5,6]
+    c = [7,8]
+
+    x, y = np.meshgrid(a,b)
+    x = x.flatten()
+    y = y.flatten()
+
+    # print x
+    # print y
+
+    for i in range(8):
+        print np.vstack((x[i],y[i]))
+
+
+    # for p in ps:
+        # print 'ok'
+        # print p

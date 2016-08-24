@@ -43,11 +43,11 @@ import skimage.measure as sk
 import skimage.segmentation as skseg
 import scipy.stats as st
 
-def main(img, direction, thresh, sigma, bias):
+def main(img, param):
 
-    seed_img = rd.small_rd(img, direction, thresh, sigma, bias)
+    seed_img = rd.small_rd(img, param)
 
-    return seed_img
+    return 0, seed_img
 
 class RockDetection():
 
@@ -58,9 +58,14 @@ class RockDetection():
         # self.thresh = 160
         self.scale = 10 # いくつのカーネルを用いるか
 
-    def small_rd(self, src, direction, thresh, sigma, bias):
+    def small_rd(self, src, param):
 
         img = copy.deepcopy(src)        
+        
+        thresh = param[0]
+        sigma = param[1]
+        bias = param[2]
+        direction = param[3]
 
         # Seed Acquisition by Viola-Jones
         vjmaps, kernels = vj.vj_main(img, direction, self.scale, sigma, bias) 
@@ -113,26 +118,20 @@ class ViolaJones():
         sizes = range(5, 2*scale+5, 2) # kernelのsize
 
         # kernelの準備
-        kernels = map(lambda x: cv2.getGaborKernel(ksize = (x,x), sigma = sigma,theta = direction, lambd = x, gamma = 25./x, psi = np.pi * 1/2), sizes)
-
+        kernels = map(lambda x: cv2.getGaborKernel(ksize = (x,x), sigma = sigma, theta = direction, lambd = x, gamma = 25./x, psi = np.pi * 1/2), sizes)
 
         for i,kernel in enumerate(kernels):
             
             # 正規化するとき
             kernels[i] = 1. * kernel / np.amax(kernel) # Normalized from -1 to 1
-            
+
             # bias使うとき
-            # l = kernel.shape[0]/2
-            # kernel[:,0:l] = 2. * kernel[:,0:l] / np.amax(kernel[:,0:l]) - bias
-            # kernels[i][:,0:l] = kernel[:,0:l]
+            l = kernel.shape[0]/2
+            kernel[:,0:l] = 2. * kernel[:,0:l] / np.amax(kernel[:,0:l]) - bias
+            kernels[i][:,0:l] = kernel[:,0:l]
 
-            # kernel[:,l+1:] = 2.* kernel[:,l+1:] / abs(np.amin(kernel[:,l+1:])) + bias
-            # kernels[i][:,l+1:] = kernel[:,l+1:]
-
-
-
-
-
+            kernel[:,l+1:] = 2.* kernel[:,l+1:] / abs(np.amin(kernel[:,l+1:])) + bias
+            kernels[i][:,l+1:] = kernel[:,l+1:]
 
 
         # filtering # kernelの大きさによる正規化
@@ -386,6 +385,7 @@ if __name__ == '__main__':
     img = cv2.imread('../../../data/g-t_data/resized/spirit118-1.png')
 
     # main processing
-    main(img, np.pi, 150, 4, bias=0.2)
+    param = [150, 4, 0.2, 150]
+    main(img, param)
 
     cv2.waitKey(-1)

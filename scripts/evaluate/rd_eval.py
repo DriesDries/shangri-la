@@ -20,23 +20,92 @@ import matplotlib.pyplot as plt
 import os
 import sys
 import skimage.measure as sk
-import small_rock_detection
 
-fig = plt.figure(figsize=(16,9))
-# ax1 = fig.add_subplot(121)
-ax2 = fig.add_subplot(111)
+def main(seed_img, ror_true, label_img, true_features):
 
-# ax1.set_xlim(-2,4)
-# ax1.set_ylim(0,1)
-# ax1.set_ylabel('precision or recall')
-# ax1.set_title('Target selection performance')
-# ax1.set_xticks([0,2])
-# ax1.set_xticklabels(['Precision','Recall'])
+    recall, pred_num, detect_img, true_features = get_recall(seed_img, label_img, true_features)
+    precision = get_precision(ror_true, label_img, seed_img)
+    # detect_rock = get_detect_img(img, detect_img)
+    
+    return precision, recall, np.array(true_features), detect_img.astype(np.uint8)
 
-ax2.set_xlim(0,1)
-ax2.set_ylim(0,1)
-ax2.set_xlabel('precision')
-ax2.set_ylabel('recall')
+
+def get_recall(seed_img, labels, true_features):
+    '''
+        recall = (検出できた岩の数) / (全ての岩の数)
+
+        それぞれの岩領域の中にひとつでも種があれば、検出できたこととする。
+
+        detect_img -> 検出できた岩は255、できなかった岩は150とした画像
+
+    '''
+    num = np.amax(labels)
+    non = np.zeros_like(labels)
+    reg = non.copy()
+    seed = seed_img.copy()
+
+    detect = 0
+    nondetect = 0
+
+    detect_img = non.copy()
+
+    for i in range(1, num):
+        
+        ## 領域のみに処理する
+        reg[labels==i] = 255 # 岩が255
+        seed[labels!=i] = 0  # 岩以外の種が0
+        
+        ## 検出できてるとき
+        if np.array(np.nonzero(seed)).shape[1] != 0:
+            detect += 1
+            detect_img[labels==i] = 255
+            true_features[i][0]= np.array(np.nonzero(seed)).shape[1]
+
+            ## ここで領域の大きさに応じて追加する？
+            ##  iとpsizeを追加する
+
+        ## 検出できてないとき
+        elif np.array(np.nonzero(seed)).shape[1] == 0:
+            nondetect += 1
+            detect_img[labels==i] = 150
+
+        ## 初期化と描画
+        reg[reg!=0] = 0 
+
+        seed = seed_img.copy()
+
+    recall = 1. * detect/num
+
+    return recall, detect, detect_img, true_features
+
+
+def get_precision(ror_true, labels, seed_img):
+    '''
+        precisionを求める
+        それぞれの種が岩領域の中に入っているかどうか
+        
+        Precision = (岩だった数)/(検出した岩の数)
+        
+        ror_true -> 岩領域の二値画像
+        num      -> 全部の岩の数
+    '''
+    detect = 0
+
+    seed_list = np.nonzero(seed_img)
+
+    for y,x in zip(seed_list[0], seed_list[1]):
+
+        if ror_true[y,x] != 0:
+            detect += 1
+
+    precision = 1. * detect / len(seed_list[0])
+
+    return precision
+
+def main2(ror_true, seed_list, true_num, labels, seed_img):
+    recall, pred_num, detect_img = get_recall(ror_true, seed_list, true_num, labels, seed_img)
+    # precision =     get_precision(true_ror, seed_list, true_num, labels, seed_img)
+    # detect_rock = get_detect_img(img, detect_img)
 
 def display_pc(precisions, recalls):
         ## Display result
@@ -46,8 +115,6 @@ def display_pc(precisions, recalls):
     ax1.bar(2, np.amax(recalls),  align = "center", yerr = e, ecolor = "black")
     
     ax2.plot(precisions,recalls,"-o")
-
-
 
 def img2list(img):
     ''' 
@@ -65,40 +132,7 @@ def img2list(img):
     
     return seed_list
 
-def label(img, label_img):
-    '''
-        label画像から岩領域を抽出する
-        args :      -> 
-        dst  :      -> 
-        param:      -> 
-    '''
-
-    ## Binary image of Region of Rocks
-    size = label_img.shape[0]
-    true_ror = np.zeros((size, size))
-    for i in range(size):
-        for j in range(size):
-            # Soil
-            if label_img[i,j,0] == label_img[i,j,1] == label_img[i,j,2]:
-                pass
-            # Rock
-            else:
-                true_ror[i,j] = 255
-
-    ## Get label
-    labels, num = sk.label(true_ror, return_num = True)
-
-    ## Get regions of rock and soil
-    gimg = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
-    rock = gimg.copy()
-    soil = gimg.copy()
-    rock[true_ror==0] = 0 
-    soil[true_ror!=0] = 0
-
-
-    return true_ror.astype(np.uint8), labels, num, rock, soil
-
-def get_recall(ror_true, seed_list, num, labels, seed_img):
+def get_recall2(ror_true, seed_list, num, labels, seed_img):
     '''
         recall = (検出できた岩の数) / (全ての岩の数)
 
@@ -108,8 +142,6 @@ def get_recall(ror_true, seed_list, num, labels, seed_img):
 
 
     '''
-
-
     non = np.zeros_like(ror_true)
     reg = non.copy()
     seed = seed_img.copy()
@@ -186,7 +218,7 @@ def get_recall(ror_true, seed_list, num, labels, seed_img):
 
     return recall, detect, detect_img
 
-def get_precision(ror_true, seed_list, num, labels, seed_img):
+def get_precision2(ror_true, seed_list, num, labels, seed_img):
     '''
         seedのprecisionとrecallを求める
         
@@ -280,19 +312,19 @@ if __name__ == '__main__':
             detect_rock = get_detect_img(img, detect_img)
             
             ## Display results
-            print '======================='
-            print 'Seed threshold : {}'.format(th)
-            print 'Sun direction  : {}'.format(direction)
-            print 'Gabor sigma    : {}'.format(sigma)
-            print 'Gabor bias     : {}'.format('None')
+            # print '======================='
+            # print 'Seed threshold : {}'.format(th)
+            # print 'Sun direction  : {}'.format(direction)
+            # print 'Gabor sigma    : {}'.format(sigma)
+            # print 'Gabor bias     : {}'.format('None')
             print 'Seed quantity  : {}'.format(len(seed_list))
             print 'TRUE Rock      : {}'.format(true_num)
             print 'DETECTED Rock  : {}'.format(pred_num)
-            print 'Precision      : {}'.format(round(precision, 3))
-            print 'Recall         : {}'.format(round(recall   , 3))
-            print 'Process time   : {}'.format(round(ptime, 3))
-            print 'Ateempt number : {}'.format(j*len(biases)+i, len(thresh) * len(biases) )
-            print '======================='
+            # print 'Precision      : {}'.format(round(precision, 3))
+            # print 'Recall         : {}'.format(round(recall   , 3))
+            # print 'Process time   : {}'.format(round(ptime, 3))
+            # print 'Ateempt number : {}'.format(j*len(biases)+i, len(thresh) * len(biases) )
+            # print '======================='
 
             precisions[i] = precision
             recalls[i] = recall

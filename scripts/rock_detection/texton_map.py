@@ -7,10 +7,14 @@
     ToDo:
         - リストっぽくしなきゃクラスタリングできない
             - こうなると画像上の位置考慮できなくなる
-        - 一番相関が小さいのは位相がπ変わったとき
-        - filterしたとき位相がpiずれると符合が変わっただけになる
-        - おそらく結果おかしい
-        - heatmapで表示
+
+        - textonmapつくる
+            - filtering
+                - filter bank変える
+            - k-meansでクラスタリング(高次元)
+
+
+
 ''' 
 import random
 import cv2
@@ -30,18 +34,22 @@ def main(img):
     
     # generate filter bank
     filter_bank = get_filter_bank() # float64
-    # print filter_bank.shape
+    print filter_bank.shape
+
+    
+
+
 
     # convolution
-    responses = convolution(img, filter_bank)
-    print responses.shape
+    # responses = convolution(img, filter_bank)
+    # print responses.shape
 
     # for i in range(13):
         # res = cv2.normalize(responses[i], 0, 255, norm_type = cv2.NORM_MINMAX).astype(np.uint8)
         # cv2.imshow('res',res)
         # cv2.waitKey(-1)
 
-    texton = get_texton2(responses)
+    # texton = get_texton2(responses)
     # texton = texton.astype(np.float)
     # print texton.shape
     # cv2.imshow('img',img)
@@ -49,7 +57,8 @@ def main(img):
     # cv2.imshow('minton',texton[1])
 
     # clustering
-    texton_map = clustering(img, texton)
+    # texton_map = clustering(img, texton)
+    # cv2.imshow('texton_map',texton_map)
 
 
 def get_texton2(responses):

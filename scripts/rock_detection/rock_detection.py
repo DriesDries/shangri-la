@@ -4,187 +4,121 @@
     Viola-Jones法に基づいて複数のスケールのカーネルによるテンプレートマッチングを行うことで、岩領域の抽出を行う。
     TMの結果に対して閾値処理を行い、その各領域から最大値とそのときに用いたテンプレートを求める。
     それらのピクセルを領域拡張法の種として、その種を中心としてテンプレートの大きさに基づいたガウス分布を展開し、
-    エネルギー関数を導入し、定めたエネルギーの閾値よりも小さい場合は、隣のピクセルと結合する。
-    エネルギー関数 E:
-    用いたテンプレートのパラメータ:
+    エネルギー関数を導入し、定めた閾値よりも小さい場合は、隣のピクセルと結合する。
 
     Usage: $ python rock_detection.py
-    argv : Image -> 3ch画像
-    dst  : Region of Rocks Image -> 1ch image
-
-    Get seed
-        - 角度変えたフィルタを使う
-        - adptive thresholdを使う
-        - 種を選ぶための領域選択
-            - 重み付け変えてもいい
-            - 極大値選ぶ
-            - 　
-        - parameter tuning
-            - threshold
-            - sigma 3 ~ 5
-            - bias 0 ~ 0.2
-    
-    Region Growing
-        - texture
-        - 分散
-        - パラメータの最適化
-        - gauimgの最適化
+    argv : img       -> 3ch画像
+           param     ->
+    dst  : ror       -> Region of Rocks Image -> 1ch binary image
+           seed_img  -> Seed image for image segmentation
 ''' 
 
 import time
-import math
-import copy
-import os
-import sys
-
 import cv2
 import numpy as np
-import skimage.measure as sk
-import skimage.segmentation as skseg
+import matplotlib.pyplot as plt
 import scipy.stats as st
+import skimage.measure as sk
+from scipy import stats
+from sklearn import cluster
+
+import filterbank as fb
 
 def main(img, param):
+    
+    ## Read class
+    cv = ImageConvolution()
+    rg = RegionGrowing()
+    ta = TextureAnalysis()
 
-    seed_img = rd.small_rd(img, param)
+    if param == None:
+        param = [170, 4, 0, np.pi, 0, 0, 0]
+    
+    ## Read parameters
+    thresh    = param[0]
+    sigma     = param[1]
+    bias      = param[2]
+    direction = param[3]
+    
+    ## Seed Acquisition by Viola-Jones
+    cvmaps = cv.convolution(img, direction, sigma)
+    seed_img, seed_list, scale_img = cv.get_seed(img, cvmaps, thresh) # listはy,x
+    new_seed_img, new_seed_list = cv.twin_seed(img, seed_img, scale_img) # light->255, shade ->130
 
-    return 0, seed_img
+    ## Texture analysis
+    responses = ta.filtering(img, name='MR', radius=6)
+    # texton_map, centers = ta.texton_map(responses, N = 8)
 
-class RockDetection():
+    ## Image clustering
+    ror = rg.main(img, new_seed_list, scale_img, responses, param)
 
-    def __init__(self): # インスタンス変数
-        
-        self.min_size = 10        # 最小領域の大きさ  
-        # self.sun_direction = np.pi
-        # self.thresh = 160
-        self.scale = 10 # いくつのカーネルを用いるか
+    return ror, seed_img
 
-    def small_rd(self, src, param):
+class ImageConvolution():
 
-        img = copy.deepcopy(src)        
-        
-        thresh = param[0]
-        sigma = param[1]
-        bias = param[2]
-        direction = param[3]
-
-        # Seed Acquisition by Viola-Jones
-        vjmaps, kernels = vj.vj_main(img, direction, self.scale, sigma, bias) 
-        seed_img, seed_list, scale_img = vj.get_seed(vjmaps, thresh) # listはy,x
-
-
-        # Region Growing Algolithm
-        # ror = rgrow.rg_vj(src, seed_list, seed_img, scale_img, self.scale)
-
-        # display result ##########################################################
-        # print len(seed_list)
-        # for i in range(1,11):
-        #     kernel = kernels[i-1]+0.5
-        #     b,g,r = cv2.split(src * 0.8)
-        #     scale_img[seed_img==0]=100
-
-        #     r[seed_img!=0]  = 255
-        #     g[scale_img==i-1] = 255
-        #     b[scale_img==i-1] = 0
-        #     print 'scale = {}, quantity = {}'.format(kernel.shape,(scale_img==i-1).sum())
-        #     res = cv2.merge((b,g,r)).astype(np.uint8)
-        #     cv2.imshow('res',res)
-        #     cv2.imshow('kernel',kernel)
-        #     cv2.waitKey(-1)        
-
-        # cv2.imshow('ror',ror)
-        # cv2.imshow('seed_img',seed_img)
-        # print 'small seed number = ',len(seed_list)
-
-
-        ############################################################################
-
-        return seed_img
-
-class ViolaJones():
-
-    def vj_main(self, src, direction, scale, sigma, bias):
+    def convolution(self, img, direction, sigma):
         '''
-        入力画像に複数のスケールのカーネルを用いてテンプレートマッチングを行う。
-        そもそもfilterlingじゃなくてTMにする？
-        src: 
-        dst: seed
-        scaleの数だけ返す
-        psiは位相
-
+            入力画像を太陽方向に基づいた複数のカーネルで畳みこむ
+            param: psi -> 位相
         '''
-        img = copy.deepcopy(cv2.cvtColor(src,cv2.COLOR_BGR2GRAY))
+        ## Kernels acquisition
+        kernels = map(lambda x: cv2.getGaborKernel(ksize = (x,x), sigma = sigma, theta = direction, lambd = x, gamma = 25./x, psi = np.pi * 1/2), range(5, 25, 2))
 
-        # カーネルの準備                
-        sizes = range(5, 2*scale+5, 2) # kernelのsize
-
-        # kernelの準備
-        kernels = map(lambda x: cv2.getGaborKernel(ksize = (x,x), sigma = sigma, theta = direction, lambd = x, gamma = 25./x, psi = np.pi * 1/2), sizes)
-
+        ## Normalize each kernels -1 ~ 1
         for i,kernel in enumerate(kernels):
-            
-            # 正規化するとき
-            kernels[i] = 1. * kernel / np.amax(kernel) # Normalized from -1 to 1
+            kernels[i] = 1. * kernel / np.amax(kernel)
 
-            # bias使うとき
-            l = kernel.shape[0]/2
-            kernel[:,0:l] = 2. * kernel[:,0:l] / np.amax(kernel[:,0:l]) - bias
-            kernels[i][:,0:l] = kernel[:,0:l]
+        ## Normalize each response 0 ~ 255 ## Convolution and normalization with kernel size 
+        responses = map(lambda x:cv2.filter2D(cv2.cvtColor(img,cv2.COLOR_BGR2GRAY), cv2.CV_64F, x),kernels)
+        responses = cv2.normalize(np.array(responses), 0, 255, norm_type = cv2.NORM_MINMAX).astype(np.uint8)
 
-            kernel[:,l+1:] = 2.* kernel[:,l+1:] / abs(np.amin(kernel[:,l+1:])) + bias
-            kernels[i][:,l+1:] = kernel[:,l+1:]
+        ### display ###
+        # for kernel in kernels:
+        #     cv2.imshow('kernel',abs(kernel))
+        #     cv2.waitKey(-1)
+        # for res in responses:
+        #     cv2.imshow('responses',res)
+        #     cv2.waitKey(-1)
 
 
-        # filtering # kernelの大きさによる正規化
-        vjmaps = map(lambda x:cv2.filter2D(img, cv2.CV_64F, x),kernels)
-        vjmaps = map(lambda x:vjmaps[x]/(sizes[x]**2),range(len(sizes))) 
+        return responses
 
-        # すべてのvjmapsを通して0-255で正規化
-        vjmaps = cv2.normalize(np.array(vjmaps), 0, 255, norm_type = cv2.NORM_MINMAX)
-        vjmaps = vjmaps.astype(np.uint8)
-
-        return vjmaps,kernels
-
-    def get_seed(self, vjmaps, thresh):
+    def get_seed(self, img, responses, thresh):
         '''
-        vjmapsから，種を選択する。
+        responsesから，種を選択する。
         seed_imgとseed_listとそれぞれのscaleを返す。
         
-        seed_img    : seedにvjmapsの値が格納された画像
+        seed_img    : seedにresponsesの値が格納された画像
         seed_list   : seed_imgをlistにしたもの
         seed_list2  : 種が類似度の昇順で並んでるlistスケールが入ってるリスト
         scale       : seed_listに対応したそれぞれのkernelの
         scale_img   : それぞれのピクセルの最も大きいscaleが入ってる
         '''
         
-        # 閾値処理
-        vjmaps[vjmaps<thresh]=0
+        ## Thresholding
+        responses[responses<thresh]=0
 
-        # for vjmap in vjmaps:
-            # cv2.imshow('vjmaps',vjmap)
-            # cv2.waitKey(-1)
+        maxima = np.zeros_like(responses[0])
+        scale_img  = np.zeros_like(responses[0])
 
-        # 最大値とそのスケールが入る画像の用意
-        maxima = np.zeros_like(vjmaps[0])
-        scale_img  = np.zeros_like(vjmaps[0])
+        ## 各ピクセルの最大値抽出、その値とスケールを画像に入れる
+        for i in range(responses.shape[1]):
+            for j in range(responses.shape[2]):
+                maxima[i,j] = np.max(responses[:,i,j])   # 最大値が入る
+                scale_img[i,j]  = np.argmax(responses[:,i,j])+1 # そのときのスケールが入る
 
-        # 各ピクセルの最大値抽出、その値とスケールを画像に入れる
-        for i in range(vjmaps.shape[1]):
-            for j in range(vjmaps.shape[2]):
-                maxima[i,j] = np.amax(vjmaps[:,i,j])   # 最大値が入る
-                scale_img[i,j]  = np.argmax(vjmaps[:,i,j]) # そのときのスケールが入る
+        ## Seed Acquisition
+        # seed_img = self.get_maxima(maxima) ## 各領域の最大値の抽出
+        seed_img = self.get_maxima_scale(maxima, scale_img) ## 各領域の最大のスケールの抽出
+        scale_img[seed_img == 0] = 0
 
-        # cv2.imshow('maxima',maxima)
-        # cv2.waitKey(-1)
 
-        # seedの取得
-        seed_img = self.get_maxima(maxima) # 各領域の最大値を求める
-        seed_list, value = self.img2list(seed_img)
-
-        # 昇順の要素番号の取得
-        order = np.argsort(value)[::-1]
+        ## 昇順の要素番号の取得
         
-        # listをorderに沿った昇順にする
+        ## listをorderに沿った昇順にする
+        seed_list, value = self.img2list(seed_img)
         seed_list2 = []
+        order = np.argsort(value)[::-1]
         for i in range(len(seed_list)):
             seed_list2.append(seed_list[order[i]])
 
@@ -197,7 +131,7 @@ class ViolaJones():
         dst: 領域の最大値のピクセルにのみその値が格納された画像。
         '''
 
-        img = copy.deepcopy(src)
+        img = src.copy()
         img[img!=0] = 255
 
         # 各領域にラベルをつける
@@ -221,10 +155,42 @@ class ViolaJones():
         
         return seed_img
 
-    def img2list(self,img):
-        ''' 
-        画像で非0の座標をlistに
+    def get_maxima_scale(self, maxima, scale):
+        '''
+        入力された画像を領域分割し、各領域の最大値を算出する。
+        src: 1ch-img
+        dst: 領域の最大値のピクセルにのみその値が格納された画像。
+        '''
 
+        # 各領域にラベルをつける
+        s = maxima.copy()
+        s[s!=0] = 255
+        
+        labels, num = sk.label(s, return_num = True) 
+
+        seed_img = np.zeros_like(maxima)
+        
+        # 各領域の最大値を求める
+        for i in range(1,np.max(labels)):
+            ## 初期化
+            scale_i = scale.copy() # 初期に戻す
+            maxima_i = maxima.copy()
+
+            ## iの領域だけ残す
+            scale_i[labels!=i] = 0 # これで残った領域の最大値求める
+            maxima_i[labels!=i] = 0 # これで残った領域の最大値求める
+
+            max_scale_i = np.max(scale_i) # 領域の中の最も大きいスケールを種とする
+            maxima_i[scale_i != max_scale_i] = 0
+            # print np.max(maxima_i)
+
+            seed_img[maxima_i == np.max(maxima_i)] = np.max(maxima_i)
+
+        return seed_img
+
+    def img2list(self, img):
+        ''' 
+            画像で非0の座標をlistに
         '''
         vj_list = []
         # vj_list = np.empty((0,2),np.int16)
@@ -238,21 +204,116 @@ class ViolaJones():
         
         return vj_list, np.array(value)
 
-class RegionGrowing():
+    def twin_seed(self, img, seed_img, scale_img):
+        '''
+            近傍で最も輝度値が高いピクセルと低いピクセルを種とする
+        '''
+        gimg = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
+
+        new_seed = np.zeros_like(gimg)
+        new_seed_list = []
+
+        for j in range(4,seed_img.shape[0]-4):
+            for i in range(4,seed_img.shape[1]-4):
+
+                if seed_img[j,i] != 0:
+                    ## 近傍領域の最大値と最小値をseedにする
+                    ma = np.argmax(gimg[j-2:j+3,i-2:i+3])
+                    mi = np.argmin(gimg[j-2:j+3,i-2:i+3])
+                    new_seed[j-2 + ma/5, i-2 + ma%5] = 255
+                    new_seed[j-2 + mi/5, i-2 + mi%5] = 130
+                    new_seed_list.append([j,i,j-2 + ma/5, i-2 + ma%5,j-2 + mi/5, i-2 + mi%5])
+
+        return new_seed, np.array(new_seed_list)
+
+class TextureAnalysis():
     
-    def __init__(self):
+    def filtering(self, img, name, radius):
         
-        # パラメータ
-        self.thresh_rg = 1     # 結合条件の閾値
-        self.thresh_sm = 20
-        self.region_number = 20000
-        self.max_size = 1000
+        ## get filterbank
+        bank = fb.main(name, radius)
+        
+        fgimg = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY).astype(np.float64)
+        responses = []
+        sums = []
+        max_responses = []
 
-        self.ave_kernel = np.array([[0.11,0.11,0.11],
-                                    [0.11,0.11,0.11],
-                                    [0.11,0.11,0.11]])
+        if name == 'MR':
 
-    def rg_vj(self, src, seed_list, seed_img, scale, scale_number):
+            edges = bank[0]
+            bars  = bank[1]
+            rots  = bank[2]
+            
+            # gabor filterから3つ
+            for i,kernel in enumerate(edges):
+
+                response = cv2.filter2D(fgimg, cv2.CV_64F, kernel)
+                responses.append(cv2.filter2D(fgimg, cv2.CV_64F, kernel))
+                sums.append(response.sum())
+                    
+                if (i+1)%6 == 0 :
+                    # 最大値がふくまれているresを保存する？
+                    # print np.argmax(sums),np.max(sums)
+                    max_responses.append(responses[np.argmax(sums)])
+
+                    # 初期化
+                    responses = []
+                    sums = []
+
+            for i,kernel in enumerate(bars):
+                response = cv2.filter2D(fgimg, cv2.CV_64F, kernel)
+                responses.append(cv2.filter2D(fgimg, cv2.CV_64F, kernel))
+                sums.append(response.sum())
+                    
+                if (i+1)%6 == 0 :
+                    # 最大値がふくまれているresを保存する？
+                    # print np.argmax(sums),np.max(sums)
+                    max_responses.append(responses[np.argmax(sums)])
+
+            for i,kernel in enumerate(rots):
+                max_responses.append(cv2.filter2D(fgimg, cv2.CV_64F, kernel))
+
+
+        if name == 'LM':
+            for i,kernel in enumerate(schmids):
+                max_responses.append(cv2.filter2D(fgimg, cv2.CV_64F, kernel))
+
+        ## normalize 0 ~ 1
+        max_responses += abs(np.min(max_responses))
+        max_responses = max_responses / np.max(max_responses)
+
+        return max_responses
+
+    def texton_map(self, responses, N = 8):
+        '''
+            k-meansでresponsesをクラスタリングする
+        '''
+        
+        ## 配列の作成
+        arr = []
+        for res in responses:
+            arr.append(res.flatten())
+        arr = np.array(arr).T
+
+        ## サンプリングする場合
+        # arr = np.array(random.sample(arr,1000))
+        # arr = arr[:,0:8] # test function
+
+        ## arrをクラスタリングする
+        kmean = cluster.KMeans(n_clusters=N, init='k-means++', n_init=10, max_iter=300,tol=0.0001,precompute_distances='auto', verbose=0,random_state=None, copy_x=True, n_jobs=1)
+        arr_cls = kmean.fit(arr)
+        pred_labels  = arr_cls.labels_
+        pred_centers = arr_cls.cluster_centers_
+        
+        # texton mapの生成
+        size = int(math.sqrt(len(pred_labels)))
+        texton_map = np.reshape(pred_labels, (size,size))
+
+        return texton_map, pred_centers
+
+class RegionGrowing():
+
+    def main(self, img, seed_list, scale_img, responses, param):
         '''
             Region Growingのメイン
             args : src          -> img,3ch
@@ -263,25 +324,23 @@ class RegionGrowing():
             param:      -> 
         '''        
 
-        img = copy.deepcopy(src)
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY).astype(np.uint16)
-        rors = np.zeros_like(cv2.cvtColor(src,cv2.COLOR_BGR2GRAY)).astype(np.uint8)
+        gimg = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY).astype(np.int16)
+        rors = np.zeros_like(gimg).astype(np.uint8)
+        gauimgs = self.get_gau_image() # 0-1に正規化,float64 # 複数スケールのgaussian imageの用意
 
-        # フィルタごとのgaussian imageの用意
-        gauimgs = self.gau_function(scale_number) # 0-1に正規化,float64
+        for i, seed in enumerate(seed_list):
 
-        for s in range(10):
-         for i, y, x in zip( range(len(seed_list[:,0])) , seed_list[:,0], seed_list[:,1]):
-            # print '%s'%(i+1),'/%s'%len(seed_list[:,0]),'個目 x=',x,'y=',y            
-            if rors[y,x] == 0: # 新たな種
-                ror = self.growing_vj(img, x, y, gauimgs[scale[y,x]]) 
-                rors[ror==255] = 255 # renew rors
-         
+            # if rors[seed[0],seed[1]] == 0: # 新たな種
+            ror = self.growing(gimg, seed, gauimgs[scale_img[seed[0],seed[1]] - 1], responses, param) 
+            rors[ror==255] = 255
+            rors[ror==200] = 200
+
+            print '{}/{} : region size = {}'.format((i+1), len(seed_list[:,0]), np.count_nonzero(ror))
+
         return rors
 
-    def growing_vj(self, src, ori_x, ori_y, gauimg):
+    def growing(self, img, seed, gauimg, responses, param):
         '''
-            Region Growingのメイン
             args : src          -> img,3ch
                    ori_seed     -> x,yの順の配列
             dst  : region_map   -> 領域が255,他が0の1ch画像
@@ -289,79 +348,89 @@ class RegionGrowing():
 
             param:      -> 
         '''
-        img = copy.deepcopy(src)
-        sx = copy.deepcopy(ori_x)
-        sy = copy.deepcopy(ori_y)
+
+        th = param[4]
+        th2 = param[5]
 
         # 準備
-        region_map = np.zeros_like(img).astype(np.uint8)
-        region_map[ori_y,ori_x] = 255
-        seed = []
-        seed.append([ori_x,ori_y])
+        ror = np.zeros_like(img).astype(np.uint8)
+        ror[seed[0], seed[1]] = 255
+        ror[seed[2], seed[3]] = 255
+        ror[seed[4], seed[5]] = 255
 
-        # seedの周囲のピクセルの平均値の算出
-        if sx == 0 or sy == 0 or sx >= img.shape[0]-1 or sy >=img.shape[1] - 1: 
-            light_ave = 0
-            shade_ave = 0
-        else:
-            light_ave = (src[sy-1,sx-1]*1. + src[sy,sx-1] + src[sy+1,sx-1])/3
-            # shade_ave = (src[sy-1,sx+1]*1. + src[sy,sx+1] + src[sy+1,sx+1])/3
-            shade_ave = float(min(src[sy-1,sx+1]*1., src[sy,sx+1], src[sy+1,sx+1]))
+        sy = seed[0]
+        sx = seed[1]
+        seeds = []
+        seeds.append([seed[2],seed[3]]) # maxを種に
+        seeds.append([seed[4],seed[5]]) # minを種に
+
+        chi1 = 0
+        chi2 = 0
+        count1 = 0
+        count2 = 0
+
+        '''lightとshadeでそれぞれgrowingする'''
 
         # region growing
         for i in xrange(100000):
 
-            if light_ave == 0 and shade_ave == 0:
-                break
-            if i == len(seed):
-                break
-            
-            # renew seed point
-            x,y = seed[i]
-            # distance = math.sqrt( (y-sy)**2 + (x-sx)**2 )
-            
-            # 1pixelごとの処理
+            if i == len(seeds): break # 終了条件
+            if i >= 3000: break # 中断条件
+
+            y, x = seeds[i] # renew seed point
+
+            ## Compare with around pixels
             for u,v in zip([x,x-1,x+1,x],[y-1,y,y,y+1]):
+              
+                ## 中断条件 : 画像の端か検出済みだったら
+                if u < 0 or u >= img.shape[1] or v < 0 or v >= img.shape[0]: continue
+                elif ror[v,u] != 0: continue
 
-                # gau_kernelより外だとgau=1にする
-                if abs(v - sy) > int(gauimg.shape[0]/2 -1) or abs(u - sx) > int(gauimg.shape[1]/2 -1):
-                    gau = 1.0                
-                else:
-                    gau = gauimg[int(v-sy+gauimg.shape[0]/2), int(u-sx+gauimg.shape[1]/2)]
-             
-                ''' 領域拡張条件 '''
-                E1 = gau * abs(light_ave - img[v,u])
-                # E2 = gau * abs(shade_ave - img[v,u])
-                # if 10 > E1 or 10 > E2:
-                if 10 > E1 :
-                
-                    # renew region map
-                    if region_map[v,u] == 0: # 新しい種だった場合
-                        region_map[v,u] = 255
-                        seed.append([u,v])
-                         # count += 1
+                else: ## 継続条件
+                    ## Calculate gaussian value
+                    if abs(v - sy) > int(gauimg.shape[0]/2 -1) or abs(u - sx) > int(gauimg.shape[1]/2 -1):
+                        gau = 1.0                
+                    else:
+                        gau = gauimg[int(v-sy+gauimg.shape[0]/2), int(u-sx+gauimg.shape[1]/2)]
 
-                # 処理中断条件
-                if u == 0 or u >= len(src[0])-1 or v == 0 or v >= len(src[:,0])-1:
-                    break
-                else:
-                    continue
+                    ''' 領域拡張条件 ''' ## v,u -> 拡張先 y,x -> 今いるseed seed[2],seed[3] -> もともとのseed
+                    # chi = stats.chisquare(responses[:,v,u], responses[:,seed[2],seed[3]])[0]
+                    ed = np.linalg.norm(responses[:,v,u] - responses[:, y, x], ord=None) # ordは正規化
+       
+                    # E1 = abs(img[v,u] - img[tuple(seeds[0])])
+                    E2 = gau * abs(img[v,u] - img[tuple(seeds[0])])
+                    E3 = img[v,u] < 60
+                    # E4 = abs(stats.chisquare(responses[:,v,u], responses[:,y,x])[0])
+                    # E5 = dis[texton_map[v,u], texton_map[y,x]] # cluster間の距離
+                    # E6 = img[v,u] < img[y,x]
+                    
+                    if E3: # 影領域
+                        ror[v,u] = 255
+                        seeds.append([v,u])
 
-        return region_map
+                    if E2 < th and ed > th2:
+                        ror[v,u] = 255
+                        seeds.append([v,u])
 
-    def gau_function(self,scale):
+        ## dilateとerodeをする
+        ror = cv2.dilate(ror, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5,5)))
+        ror = cv2.erode(ror, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5,5)))
+
+        return ror
+
+    def get_gau_image(self):
         '''
             scaleの配列に基づいた複数のガウシアン関数を用意する
         '''
 
         kernels = []
+        # sigma = range(12,2,-1) # 分散の定義
 
-        sigma = range(12,2,-1) # 分散の定義
-
-        for i in range(scale):
+        for i in range(10):
             size = 40 # kernelのサイズ
-            nsig = sigma[i]  # 分散sigma
-            interval = (2*nsig+1.)/(size) # 
+            # nsig = sigma[i]  # 分散sigma
+            nsig = 8  # 分散sigma
+            interval = (2*nsig+1.)/(size)
             x = np.linspace(-nsig-interval/2., nsig+interval/2., size+1) # メッシュの定義
 
             kern1d = np.diff(st.norm.cdf(x)) # 多分ここでガウシアンにしてる,1次元
@@ -369,23 +438,23 @@ class RegionGrowing():
             kernel_raw = cv2.normalize(kernel_raw, 0, 1, norm_type = cv2.NORM_MINMAX)
             kernel_raw = abs(1-kernel_raw)
             kernels.append(kernel_raw)
-            # cv2.imshow('kernels',kernels[i])
-            # cv2.waitKey(0)
 
         return kernels
-
-'''read class'''
-rd = RockDetection()
-rgrow = RegionGrowing()
-vj = ViolaJones()
 
 if __name__ == '__main__':
 
     # get image
     img = cv2.imread('../../../data/g-t_data/resized/spirit118-1.png')
 
-    # main processing
-    param = [150, 4, 0.2, 150]
-    main(img, param)
+    ## Main processing
+    ror, seed_img = main(img, param=None)
 
+    ## Draw result 
+    b,g,r = cv2.split((img*0.8).astype(np.uint8))
+    r[ror == 255] = 255
+    g[ror == 200] = 255
+    b[seed_img != 0] = 255
+    res = cv2.merge((b,g,r))
+
+    cv2.imshow('res',res)
     cv2.waitKey(-1)

@@ -2,6 +2,9 @@
 '''
     Usage: $ python template.py <argv>
 
+    ・領域抽出を行い、評価する
+    Region Extraction
+
     ・get_detail_scoreを複数回使う場合は、true_features[:,0]を初期化する
 ''' 
  
@@ -12,16 +15,16 @@ import numpy as np
 import skimage.measure as sk
 import matplotlib.pyplot as plt
 
-import rock_detection.rock_detection2 as rd
+import rock_detection.rock_detection as rd
 import evaluate.rd_eval as ev
 import feature_extraction.feature_extraction as fe
 import modeling.modeling as md
 import anomaly_detection.anomaly_detection as ad
 
 
-fig = plt.figure(figsize=(16,9))
+# fig = plt.figure(figsize=(16,9))
 # ax1 = fig.add_subplot(121)
-ax2 = fig.add_subplot(111)
+# ax2 = fig.add_subplot(111)
 
 # ax1.set_xlim(-2,4)
 # ax1.set_ylim(0,1)
@@ -30,30 +33,15 @@ ax2 = fig.add_subplot(111)
 # ax1.set_xticks([0,2])
 # ax1.set_xticklabels(['Precision','Recall'])
 
-ax2.set_xlim(0,1)
-ax2.set_ylim(0,1)
-ax2.set_xlabel('precision')
-ax2.set_ylabel('recall')
-ax2.set_title('Detection performance')
+# ax2.set_xlim(0,1)
+# ax2.set_ylim(0,1)
+# ax2.set_xlabel('precision')
+# ax2.set_ylabel('recall')
+# ax2.set_title('Detection performance')
 
 
 def main(src, true_ror):
     '''
-        args : src     ->  input,3ch-image
-               true_ror -> ground-truth image, 1ch
-        dst  : model   ->  model
-               target  ->  target
-        param: params  ->  parameterがgridで入ってる
-                   - params[:,0] : threshold of tm
-                   - params[:,1] : sigma
-                   - params[:,2] : bias
-                   - params[:,3] : direction
-               featues -> features of true ror
-                   - features[:,0]: detected or NONdetected (1 or 0)
-                   - features[:,1]: region ID
-                   - features[:,2]: y-coordinate
-                   - features[:,3]: pixel-size
-                   - features[:,4]: color (average of intensitys)
     '''
 
     img = copy.deepcopy(src)
@@ -61,25 +49,12 @@ def main(src, true_ror):
     params, variety = get_params()
     true_ror, label_img, true_features = get_true_features(img, true_ror)
 
-    detail = 1
-    display = 1
-    result_image = 1
-
-    precisions = []
-    recalls = []
-    results = np.empty((0,3), int)
-    dis     = np.empty((0,3), int)
-    detect_stock = np.zeros_like(true_ror)
-    detect_stock[true_ror!=0] = 150
-    detect_stock_list = np.array(true_features)[:,0].copy()
-
     for i, param in enumerate(params):
 
         ## Rock detection and evaluation
-        pred_seed_img = rd.main(img, param)
+        pred_ror, pred_seed_img = rd.main(img, param)
         precision, recall, true_features, detect_img = ev.main(pred_seed_img, true_ror, label_img, true_features)
-        print recall+precision
-        f = 2. * recall * precision / (recall+precision)
+        f = 2.*recall*precision / (recall+precision)
 
         print '======================='
         print 'Seed threshold : {}'.format(int(param[0]))
@@ -107,7 +82,7 @@ def main(src, true_ror):
         if display == True:
             dis = np.vstack((dis, np.array([precision,recall,f])))
             if (i+1)%variety == 0:
-                ax2.plot(dis[:,0], dis[:,1], "-o",label='sigma = {}'.format(param[1]), color='r')
+                ax2.plot(dis[:,0], dis[:,1], "-o",label='sigma = {}'.format(param[1]))
                 ax2.legend()
                 dis = np.empty((0,3), int)
         
@@ -126,7 +101,7 @@ def main(src, true_ror):
     
     # rangeのscoreも出すとき
     if detail == True:
-        pred_seed_img = rd.main(img, params[best])
+        pred_ror, pred_seed_img = rd.main(img, params[best])
         precision, recall, true_features, detect_img = ev.main(pred_seed_img, true_ror, label_img, true_features)
         range_p, range_r = get_detail_score(true_features, pred_seed_img)
         print 'Prc by range   : {}'.format(range_p)
@@ -221,21 +196,16 @@ def get_detail_score(true_features, seed_img):
 
 def get_params():
 
-    thresh = range(153, 220, 1)
+    thresh = range(140,191,5)
     sigma = [4,5]
-    # bias = np.arange(0.1,0.6,0.1)
-    # direction = [np.pi * 0.9, np.pi, np.pi*1.1]
-    dif2 = np.arange(0,0.3,0.03)
-    dif = np.arange(3,15,2)
+    bias = np.arange(0.1,0.6,0.1)
+    direction = [np.pi * 0.9, np.pi, np.pi*1.1]
 
     # もし定数にするとき
-    thresh = [167]
-    sigma = [4]
-    bias = [0]
+    # thresh = [140]
+    # sigma = [4]
+    # bias = []
     direction = [np.pi]
-    # direction = [np.pi * 7 / 4]
-    dif = [11]
-    dif2 = [0.09]
 
     params = []
 
@@ -244,9 +214,7 @@ def get_params():
         for th in thresh:
             for b in bias:
                 for d in direction:
-                    for di in dif:
-                        for di2 in dif2:
-                            params.append((int(th), int(s), b, d))
+                    params.append((int(th), int(s), b, d))
 
     return np.array(params), len(thresh)
 
@@ -300,13 +268,9 @@ def get_binary_ror(label_img):
 
 if __name__ == '__main__':
 
-    filename = 'spirit118-1.png'
-    # filename = 'spirit006-1.png'
-
-    img = cv2.imread('../../data/g-t_data/resized/{}'.format(filename))
-    true_ror = cv2.imread('../../data/g-t_data/label/{}'.format(filename),0)
-    print 'Target : {}'.format(filename)
-    # true_ror = get_binary_ror(label_img)
+    img = cv2.imread('../../data/g-t_data/resized/spirit118-1.png')
+    label_img = cv2.imread('../../data/g-t_data/label/spirit118-1.png')
+    true_ror = get_binary_ror(label_img)
 
     # main processing
     main(img, true_ror)

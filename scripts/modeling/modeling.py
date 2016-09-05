@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
 '''
+    
+    一次元の特徴量に対して、EM法(Expectation–Maximization Algorithm)を用いて、混合ガウス分布を当てはめる
+    
+    Usage: $ python modling.py
+             modeling.main(data,N)
 
-一次元の特徴量に対して、EM法(Expectation–Maximization Algorithm)
-を用いて、混合ガウス分布をモデリングする
-Usage: $ python modling.py <argv>
-         modeling.main(data,N)
-
-・対数尤度あってるのか？
-・BICの実装
+    ・対数尤度あってるのか？
+    ・BICの実装
 
 ''' 
 
@@ -23,9 +23,14 @@ from sklearn import mixture
 
 
 def main(data, N):
-    if N == None: N=10
-    score = expectation_maximization(data, N=10)    
-    return score
+    
+    EMs = []
+    ## dataを分割する
+    for i in range(data.shape[1]):
+        EM = expectation_maximization(data[:,i], N)
+        EMs.append(EM)
+
+    return EMs
 
 def expectation_maximization(data, N):
     '''
@@ -46,32 +51,86 @@ def expectation_maximization(data, N):
     # fitting
     EM = mixture.GMM(n_components=N, covariance_type='full',n_iter=100,verbose=0)
     EM.fit(data)
+
+    return EM
+
+def display_contour(X,Y,Z):
+    '''
+        等高線を表示
+    '''
+    XX = np.array([X.ravel(), Y.ravel()]).T
+    Z = EM.score_samples(XX)[0]
+    Z = Z.reshape(X.shape)
+    CS = plt.contour(X, Y, Z)
+    CB = plt.colorbar(CS)
+
+def calc_log_likelihood(xs, ms, vs, p):
     
-    # 描画の準備
-    x = np.linspace(start=min(data[:,0]), stop=max(data[:,0]), num=1000)
-    y = 0
-    fig = plt.figure(figsize=(15,8))
-    ax1 = fig.add_subplot(111)
-    # ax2 = fig.add_subplot(212)
+    s = 0
+    for x in xs:
+        g0 = gaussian(x, ms[0], vs[0])
+        g1 = gaussian(x, ms[1], vs[1])
+        # g2 = gaussian(x, ms[2], vs[2])
+        # g3 = gaussian(x, ms[3], vs[3])
+        # g4 = gaussian(x, ms[4], vs[4])
+        # s += math.log(p[0] * g0 + p[1] * g1 + p[2] * g2 + p[3] * g3 + p[4] * g4)
+        s += math.log(p[0] * g0 + p[1] * g1)
 
+    return s
 
-    ps = range(N)
-    p = 0
+def gaussian(x, m, v):
+    '''
+    ガウシアン分布にパラメータを代入したg(x,m,v)を返す。
+    dst : p -> float
+    '''
+    p = math.exp(- pow(x - m, 2) / (2 * v)) / math.sqrt(2 * math.pi * v)
 
-    for k in range(N): # それぞれのガウス分布を描画
-        ps[k] = EM.weights_[k] * mlab.normpdf(x, EM.means_[k,0], math.sqrt(EM.covars_[k][0][0]))
-        p += ps[k]
-        ax1.plot(x, ps[k], color='orange')
+    return p 
 
-    if EM.converged_ == True: # 収束してたら描画
-        print '...Converge...'
-        ax1.plot(x,p,color='red',linewidth=3)
-        ax1.hist(data[:,0], bins = 30, color='dodgerblue', normed=True)
+def get_data():
+    '''
+        csvファイルから配列を生成して返す
+    '''
 
-    else: # 収束しなかった場合
-        print '!!!Cannot converge!!!'
+    sam = open('../../../data/statistical data/old_faithful.csv', 'r')
+    reader = csv.reader(sam, delimiter=' ')
+
+    data = []
+    for raw in reader:
+        data.append([float(raw[0]), float(raw[1])])
+
+    sam.close()
+
+    data = np.array(data)
+
+    return data
+
+def display_result():
+    fig = plt.figure(figsize = (12,9))
+    num = 100 * data.shape[1] + 10*1 + 1*1
+    
+    for i, EM in enumerate(EMs):
         
-    return EM.score(data).sum()
+        ax = fig.add_subplot(num + i)
+        x = np.linspace(start=min(data[:,i]), stop=max(data[:,i]), num=1000)
+        y = 0
+        ps = range(N)
+        p = 0
+        
+        for k in range(N): # それぞれのガウス分布を描画
+
+            ps[k] = EM.weights_[k] * mlab.normpdf(x, EM.means_[k,0], math.sqrt(EM.covars_[k][0][0]))
+            p += ps[k]
+            plt.plot(x, ps[k], color='orange')
+
+        if EM.converged_ == True: # 収束してたら描画
+            plt.plot(x,p,color='red',linewidth=3)
+            plt.hist(data[:,i], bins = 30, color='dodgerblue', normed=True)
+        
+        else: # 収束しなかった場合
+            print '!!!Cannot converge!!!'
+        # score = EM.score(data).sum()
+
 
 def histgram_3D(data):
     '''
@@ -124,65 +183,11 @@ def display_3D(X,Y,Z):
 
     # plt.pause(-1) # これだけでok
 
-def display_contour(X,Y,Z):
-    '''
-        等高線を表示
-    '''
-    XX = np.array([X.ravel(), Y.ravel()]).T
-    Z = EM.score_samples(XX)[0]
-    Z = Z.reshape(X.shape)
-    CS = plt.contour(X, Y, Z)
-    CB = plt.colorbar(CS)
-
-def calc_log_likelihood(xs, ms, vs, p):
-    
-    s = 0
-    for x in xs:
-        g0 = gaussian(x, ms[0], vs[0])
-        g1 = gaussian(x, ms[1], vs[1])
-        # g2 = gaussian(x, ms[2], vs[2])
-        # g3 = gaussian(x, ms[3], vs[3])
-        # g4 = gaussian(x, ms[4], vs[4])
-        # s += math.log(p[0] * g0 + p[1] * g1 + p[2] * g2 + p[3] * g3 + p[4] * g4)
-        s += math.log(p[0] * g0 + p[1] * g1)
-
-    return s
-
-def gaussian(x, m, v):
-    '''
-    ガウシアン分布にパラメータを代入したg(x,m,v)を返す。
-    dst : p -> float
-    '''
-    p = math.exp(- pow(x - m, 2) / (2 * v)) / math.sqrt(2 * math.pi * v)
-
-    return p 
-
-def get_data(dim):
-    '''
-        csvファイルから配列を生成して返す
-    '''
-
-    sam = open('./data/old_faithful.csv', 'r')
-    reader = csv.reader(sam, delimiter=' ')
-
-    data = []
-
-    for raw in reader:
-        data.append([float(raw[0]), float(raw[1])])
-
-    sam.close()
-
-    data = np.array(data)
-    if dim == 1:
-        data = data[:,0] # データを1次元にする
-
-    return data
-
 
 if __name__ == '__main__':
 
-    data = get_data(dim=1)
-    score = main(data=data, N=5)
+    data = get_data()
+    
+    score = main(data=data, N=10, display='ON')
 
     print 'log likelihood = {}'.format(score)
-    plt.show()

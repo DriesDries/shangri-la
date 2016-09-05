@@ -9,15 +9,17 @@
          ror -> 岩領域が非0となった画像
     dst: features -> 各行にそれぞれの特徴が入ってる
             - features[:,0] : compositions   -> 各岩領域の色の平均
-            - features[:,1] : shape          -> fittingした楕円の短径と長径の比
+            - features[:,1] : psize          -> 領域のピクセル数
             - features[:,2] : size           -> 楕円の長径+短径
-            - features[:,3] : psize          -> 領域のピクセル数
-    ToDO:
-        ・組成を抽出する前に小さい領域は削除する
-        ・sizeを楕円の面積にする
-        ・一つの岩領域から複数の楕円が検出されてしまう -> 致命的
-        ・labels[labels==255]が検出できてない
+            - features[:,3] : shape          -> fittingした楕円の短径と長径の比
+            - features[:,4] : center_x       -> 楕円の中心座標x
+            - features[:,5] : center_y       -> 楕円の中心座標y
 
+
+    ToDO:
+        ・sizeを楕円の面積にする
+        ・小さい領域には楕円をfittingすることができない
+            - そもそもする必要はあるのか？
 ''' 
 import time
 import cv2 
@@ -37,28 +39,34 @@ def main(img, ror):
     ## labeling ## 小さい領域を削除
     labels = get_labels(ror)
 
-    ## Get features
-    compositions, psizes = get_composition(img, labels)
+    ## Get feature
+    compositions = get_composition(img, labels)
 
-    # 楕円フィッティングを行い、楕円からFEを行う   
-    centers, sizes, shapes = geometric_features(img, labels, modify='ON')
+    # Get geometric features by ellipse fitting   
+    centers, sizes, shapes, psizes = geometric_features(img, labels, modify='ON')
+
+    ## merge features
     
-    # 特徴の結合
-    sizes = sizes.reshape((sizes.shape[0],1))
-    shapes = shapes.reshape((shapes.shape[0],1))
-    features = np.hstack((shapes, sizes, shapes))
+    features = np.hstack((compositions, psizes, sizes, shapes, centers))
 
     return features
 
-def get_labels(ror, minsize=100):
+def get_labels(ror, minsize=20):
+    '''
+        ・各領域にラベルをつける
+        ・0の領域にはラベルをつけない
+        ・minsizeより小さい領域は削除する
+    '''
+    labels = sk.label(ror, return_num = False, background=0)
 
-    labels = sk.label(ror, return_num = False)
-
-    # for i in range(1, np.max(labels)+1):        
-        # if np.count_nonzero(labels[labels==i]) < minsize:
-            # labels[labels == i] = 0 
-
-    return labels
+    for i in range(1, np.max(labels)+1):
+        if np.count_nonzero(labels[labels==i]) < minsize:
+            ror[labels == i] = 0 
+    
+    ## Generate label images from only large regions
+    large_labels = sk.label(ror, return_num = False, background=0)
+    # print np.nonzero(large_labels==0)
+    return large_labels
 
 def get_composition(img, labels):
     '''
@@ -66,14 +74,14 @@ def get_composition(img, labels):
     '''        
     gimg = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     compositions = []
-    psizes = []
 
-    for i in range(1, np.max(labels)+1): # 非岩領域以外で
-
+    for i in range(0, np.max(labels)+1): # 非岩領域以外で
         compositions.append(np.sum(img[labels==i]) / np.count_nonzero(img[labels==i])) # (各領域の輝度値の合計) / (それぞれの領域のサイズ)
-        psizes.append(np.count_nonzero([labels==i]))
         
-    return compositions, psizes
+    compositions = np.array(compositions)
+    compositions = compositions.reshape((compositions.shape[0],1))
+
+    return compositions
 
 def geometric_features(img, labels, modify):
     '''
@@ -82,28 +90,30 @@ def geometric_features(img, labels, modify):
         dst  :      -> 中心座標、大きさ、形状
         param:      -> 
     '''
-    
     centers  = []
     sizes  = []
     shapes = []
+    psizes = []
 
     ## Ellipse fitting
     ellipses = fit_ellipse(img, labels)
 
     ## Get geometry features
-
     for i, ellipse in enumerate(ellipses):
-        
+
         centers.append((ellipse[0]))             # 楕円の中心座標
         shapes.append(ellipse[1][0]/ellipse[1][1])  # 長径と短径の比
         sizes.append(ellipse[1][0] + ellipse[1][1]) # 長径と短径の和
+        psizes.append(np.count_nonzero([labels==i]))
     
+    ## modify region sizes based on distance from camera
     centers = np.array(centers).astype(np.uint16) # float -> int
+    if modify == 'ON':
+        sizes = modify_sizes(centers, sizes, img.shape[0])
 
-    # modified_sizes = modify_sizes(centers,sizes,src.shape[0])
+    shapes, sizes, psizes = map(lambda x: np.array(x).reshape( np.array(x).shape[0],1), [shapes, sizes, psizes])
 
-
-    return np.array(centers), np.array(sizes), np.array(shapes)
+    return centers, sizes, shapes, psizes
 
 def fit_ellipse(img, labels):
     '''
@@ -117,30 +127,31 @@ def fit_ellipse(img, labels):
     
 
     gimg = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    eximg = np.vstack((np.zeros(gimg.shape[0]), gimg, np.zeros(gimg.shape[0])))
+    a = np.reshape(np.zeros(eximg.shape[0]), (np.zeros(eximg.shape[0]).shape[0],1))
+    eximg = np.hstack((a, eximg, a))
+
     ellipses = []
 
-    for i in range(1, np.amax(labels)+1):
-        if labels[labels==i].sum() != 0:
+    for i in range(0, np.amax(labels)+1):
+        # print i, np.count_nonzero(labels==i)
+        ## Initialization
+        res = np.zeros_like(gimg).astype(np.uint8)
+        res[labels==i] = 255
 
-            ## Initialization
-            res = np.zeros_like(gimg).astype(np.uint8)
-            res[labels==i] = 255
-            res = cv2.dilate(res,cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5,5)))
-            res = cv2.erode(res,cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5,5)))
+        res = np.vstack((np.zeros(res.shape[0]), res, np.zeros(res.shape[0])))
+        a = np.reshape(np.zeros(res.shape[0]), (np.zeros(res.shape[0]).shape[0],1))
+        res = np.hstack((a, res, a)).astype(np.uint8)
 
-            contour, hierarchy = cv2.findContours(res, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-            print np.count_nonzero(res),contour[0]
-            ellipse = cv2.fitEllipse(contour[0])
-            # ellipses.append(ellipse)
+        contour, hierarchy = cv2.findContours(res, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+        
+        if len(contour) >= 2: # エラー処理
+            print 'Detected {} ellipses from sigle rock'.format(len(contour))
+        ellipse = cv2.fitEllipse(contour[0])
+        ellipses.append(ellipse)
 
-            print 'ok'
-            
         ## draw contours
-        # cv2.drawContours(ell,contour,-1,(255,255,255),2)
-        # cv2.ellipse(ell,ellipse,(0,0,255),1)
-        # cv2.imshow('ell',ell)
-        # cv2.imshow('con',con)
-        # cv2.waitKey(-1)
+        # cv2.ellipse(img, ellipse, (0,0,255), 1)
 
     return ellipses
 
@@ -153,9 +164,9 @@ def modify_sizes(centers, sizes, img_size):
     modified_sizes = []
 
     for i,c in enumerate(centers[:,0]):
-        modified_sizes.append(sizes[i] * dis[i])
+        modified_sizes.append(sizes[i] * dis[c])
 
-    return modified_sizes
+    return np.array(modified_sizes)
 
 def get_distance_matrix(pan, fov, height, rows):
     '''

@@ -14,6 +14,7 @@
 ''' 
 
 import time
+import copy
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
@@ -32,7 +33,8 @@ def main(img, param):
     ta = TextureAnalysis()
 
     if param == None:
-        param = [170, 4, 0, np.pi, 0, 0, 0]
+        param = [160, 4, 0, np.pi, 0, 10, 0.1]
+        print 'param = None : {}'.format(param)
     
     ## Read parameters
     thresh    = param[0]
@@ -66,20 +68,20 @@ class ImageConvolution():
 
         ## Normalize each kernels -1 ~ 1
         for i,kernel in enumerate(kernels):
-            kernels[i] = 1. * kernel / np.amax(kernel)
+            kernels[i] = 1. * kernels[i] / np.amax(kernels[i])
 
         ## Normalize each response 0 ~ 255 ## Convolution and normalization with kernel size 
-        responses = map(lambda x:cv2.filter2D(cv2.cvtColor(img,cv2.COLOR_BGR2GRAY), cv2.CV_64F, x),kernels)
+        responses = map(lambda x: cv2.filter2D(cv2.cvtColor(img,cv2.COLOR_BGR2GRAY), cv2.CV_64F, x),kernels)
+        responses = map(lambda x: responses[x]/(kernels[x].shape[0]**2), range(len(range(5, 25, 2))))
         responses = cv2.normalize(np.array(responses), 0, 255, norm_type = cv2.NORM_MINMAX).astype(np.uint8)
 
         ### display ###
         # for kernel in kernels:
-        #     cv2.imshow('kernel',abs(kernel))
-        #     cv2.waitKey(-1)
+            # cv2.imshow('kernel',abs(kernel))
+            # cv2.waitKey(-1)
         # for res in responses:
-        #     cv2.imshow('responses',res)
-        #     cv2.waitKey(-1)
-
+            # cv2.imshow('responses',res)
+            # cv2.waitKey(-1)
 
         return responses
 
@@ -97,6 +99,10 @@ class ImageConvolution():
         
         ## Thresholding
         responses[responses<thresh]=0
+        # for res in responses:
+            # cv2.imshow('responses',res)
+            # cv2.waitKey(-1)
+
 
         maxima = np.zeros_like(responses[0])
         scale_img  = np.zeros_like(responses[0])
@@ -335,7 +341,7 @@ class RegionGrowing():
             rors[ror==255] = 255
             rors[ror==200] = 200
 
-            print '{}/{} : region size = {}'.format((i+1), len(seed_list[:,0]), np.count_nonzero(ror))
+            # print '{}/{} : region size = {}'.format((i+1), len(seed_list[:,0]), np.count_nonzero(ror))
 
         return rors
 

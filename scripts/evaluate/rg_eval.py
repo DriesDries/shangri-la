@@ -79,7 +79,7 @@ def eval_area(pred_ror, true_ror):
             detect += 1
             
             ## Draw
-            plt.scatter(pre, recall, color = 'b')
+            # plt.scatter(pre, recall, color = 'b')
             # print T,P,TandP,TnorP,PnorT
 
     pre_ave    = 1. * total_pre   / detect

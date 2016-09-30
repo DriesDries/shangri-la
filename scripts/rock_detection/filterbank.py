@@ -104,6 +104,7 @@ class LeungMalikSet():
             f = np.cos(r*(np.pi*tau/sigma))*np.exp(-(r*r)/(2*sigma*sigma))
             f = f - f.mean()          # Pre-processing: zero mean
             f = f / abs(f).sum()      # Pre-processing: L_{1} normalise
+            return f
             
         for param in params:
             kernel = makefilter(size, param[0], param[1])
@@ -116,4 +117,4 @@ lm = LeungMalikSet()
 
 if __name__ == '__main__':
     
-    main('MR', radius=5)
+    main('LM', radius=5)

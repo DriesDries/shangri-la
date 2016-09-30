@@ -43,10 +43,9 @@ def main(img, ror):
     compositions = get_composition(img, labels)
 
     # Get geometric features by ellipse fitting   
-    centers, sizes, shapes, psizes = geometric_features(img, labels, modify='ON')
+    centers, sizes, shapes, psizes = geometric_features(img, labels, modify='OFF')
 
     ## merge features
-    
     features = np.hstack((compositions, psizes, sizes, shapes, centers))
 
     return features

@@ -31,11 +31,12 @@ def main(data, N):
         EMs.append(EM)
 
     return EMs
-
+ 
 def expectation_maximization(data, N):
     '''
         混合ガウス分布を用いてdataをモデリングする
-        args : data    -> モデリングしたいデータ
+        args : data   
+         -> モデリングしたいデータ
                N       -> いくつのガウス分布の線形重ね合わせで表現するか
         dst  : score   -> 対数尤度(log likelihood)
         param: N -> いくつのガウシアン分布を用いるか 
@@ -188,6 +189,6 @@ if __name__ == '__main__':
 
     data = get_data()
     
-    score = main(data=data, N=10, display='ON')
+    score = main(data=data, N=10)
 
     print 'log likelihood = {}'.format(score)

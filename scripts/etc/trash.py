@@ -290,3 +290,34 @@ def display_3D(img):
 
     plt.pause(.001) # これだけでok
     # plt.show()
+
+def display_3d(img):
+    '''
+        入力画像を3Dで表示する
+        args: X,Y,Z
+        dst : None
+    '''
+    img = cv2.imread('../../data/test_image/sample/lena.png')
+
+    gimg = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    gimg = cv2.resize(gimg,(300,300))
+    x = range(gimg.shape[0])
+    X,Y  = np.meshgrid(x,x)
+
+    # データの準備
+    from mpl_toolkits.mplot3d import Axes3D
+
+    # plot
+    fig = plt.figure()
+    ax = Axes3D(fig)
+
+    # 設定
+    ax.set_xlabel('pixel')
+    ax.set_ylabel('pixel')        
+    ax.set_zlabel('intensity')
+    # ax.set_zlim(0, 300)
+    ax.set_title('Image')
+    ax.scatter(X*5, Y*5, 1.*gimg[Y,X]/np.max(gimg), c=gimg[Y,X], cmap='gray', linewidths=0)
+    # ax.plot_surface(X*5, Y*5, 1.*gimg[Y,X]/np.max(gimg), rstride=10, cstride=10, cmap = 'jet',linewidth=0)
+    ax.set_zlim(0,10)
+    plt.show()

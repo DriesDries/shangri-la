@@ -11,6 +11,15 @@
            param     ->
     dst  : ror       -> Region of Rocks Image -> 1ch binary image
            seed_img  -> Seed image for image segmentation
+
+    同一のフィルタでやって、閾値した後の各領域の『大きさ』で見た方がいい？
+
+    PT
+        - 近傍どこまで見るか
+        - 閾値
+    小さい領域と大きい領域で分けるかどうか
+    画像の領域の何%が岩か
+
 ''' 
 
 import time
@@ -23,6 +32,7 @@ import skimage.measure as sk
 from scipy import stats
 from sklearn import cluster
 
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 import filterbank as fb
 
 def main(img, param):
@@ -33,14 +43,14 @@ def main(img, param):
     ta = TextureAnalysis()
 
     if param == None:
-        param = [160, 4, 0, np.pi, 0, 10, 0.1]
+        param = [167, np.pi, 0.12]
         print 'param = None : {}'.format(param)
     
     ## Read parameters
     thresh    = param[0]
-    sigma     = param[1]
-    bias      = param[2]
-    direction = param[3]
+    direction = param[1]
+    sigma     = 4
+    bias      = 0
     
     ## Seed Acquisition by Viola-Jones
     cvmaps = cv.convolution(img, direction, sigma)
@@ -48,11 +58,20 @@ def main(img, param):
     new_seed_img, new_seed_list = cv.twin_seed(img, seed_img, scale_img) # light->255, shade ->130
 
     ## Texture analysis
-    responses = ta.filtering(img, name='MR', radius=6)
+    responses = ta.filtering(img, name='MR', radius=2)
+    dis, center = ta.var(img, responses[:])
+
     # texton_map, centers = ta.texton_map(responses, N = 8)
+    # fig = plt.figure()
+    # ax1 = fig.add_subplot(111)
+    # divider = make_axes_locatable(ax1)
+    # cax = divider.append_axes("right", size="5%", pad=0.1)
+    # a = ax1.imshow(dis)
+    # fig.colorbar(a, cax=cax)
+    # plt.show()
 
     ## Image clustering
-    ror = rg.main(img, new_seed_list, scale_img, responses, param)
+    ror = rg.main(img, new_seed_list, scale_img, responses, param, dis)
 
     return ror, seed_img
 
@@ -281,6 +300,8 @@ class TextureAnalysis():
 
 
         if name == 'LM':
+            schmids  = bank[3]
+            print schmids.shape
             for i,kernel in enumerate(schmids):
                 max_responses.append(cv2.filter2D(fgimg, cv2.CV_64F, kernel))
 
@@ -317,9 +338,29 @@ class TextureAnalysis():
 
         return texton_map, pred_centers
 
+    def var(self, img, responses):
+        
+        center = []
+        dis = np.zeros_like(img[:,:,0]).astype(np.float64)
+        
+        ## Center Acquitision    
+        for n in range(responses.shape[0]):
+            res = responses[n,:,:].sum() / 400**2
+            center.append(res)
+
+        ## Var processing
+        for j in range(dis.shape[0]):
+            for i in range(dis.shape[1]):
+                dis[j,i] = abs(np.linalg.norm(responses[:,j,i] - center[:]))
+
+        ## Normalization
+        dis = dis / np.max(dis)
+
+        return dis, center
+
 class RegionGrowing():
 
-    def main(self, img, seed_list, scale_img, responses, param):
+    def main(self, img, seed_list, scale_img, responses, param, dis):
         '''
             Region Growingのメイン
             args : src          -> img,3ch
@@ -334,18 +375,21 @@ class RegionGrowing():
         rors = np.zeros_like(gimg).astype(np.uint8)
         gauimgs = self.get_gau_image() # 0-1に正規化,float64 # 複数スケールのgaussian imageの用意
 
+        gimg = 1. * gimg / np.max(gimg) 
+
         for i, seed in enumerate(seed_list):
 
             # if rors[seed[0],seed[1]] == 0: # 新たな種
-            ror = self.growing(gimg, seed, gauimgs[scale_img[seed[0],seed[1]] - 1], responses, param) 
+            ror = self.growing(gimg, seed, gauimgs[scale_img[seed[0],seed[1]] - 1], responses, param, dis) 
+            ror_shade = self.growing_shade(gimg, seed, gauimgs[scale_img[seed[0],seed[1]] - 1], responses, param, dis) 
             rors[ror==255] = 255
-            rors[ror==200] = 200
+            rors[ror_shade==255] = 255
 
-            # print '{}/{} : region size = {}'.format((i+1), len(seed_list[:,0]), np.count_nonzero(ror))
+            # print '{}/{} : region size = {}'.format((i+1), len(seed_list[:,0]), np.count_nonzero(ror)+np.count_nonzero(ror2))
 
         return rors
 
-    def growing(self, img, seed, gauimg, responses, param):
+    def growing(self, img, seed, gauimg, responses, param, dis):
         '''
             args : src          -> img,3ch
                    ori_seed     -> x,yの順の配列
@@ -355,8 +399,7 @@ class RegionGrowing():
             param:      -> 
         '''
 
-        th = param[4]
-        th2 = param[5]
+        th = param[2]
 
         # 準備
         ror = np.zeros_like(img).astype(np.uint8)
@@ -368,14 +411,12 @@ class RegionGrowing():
         sx = seed[1]
         seeds = []
         seeds.append([seed[2],seed[3]]) # maxを種に
-        seeds.append([seed[4],seed[5]]) # minを種に
+        # seeds.append([seed[4],seed[5]]) # minを種に
 
         chi1 = 0
         chi2 = 0
         count1 = 0
         count2 = 0
-
-        '''lightとshadeでそれぞれgrowingする'''
 
         # region growing
         for i in xrange(100000):
@@ -400,21 +441,80 @@ class RegionGrowing():
                         gau = gauimg[int(v-sy+gauimg.shape[0]/2), int(u-sx+gauimg.shape[1]/2)]
 
                     ''' 領域拡張条件 ''' ## v,u -> 拡張先 y,x -> 今いるseed seed[2],seed[3] -> もともとのseed
-                    # chi = stats.chisquare(responses[:,v,u], responses[:,seed[2],seed[3]])[0]
-                    ed = np.linalg.norm(responses[:,v,u] - responses[:, y, x], ord=None) # ordは正規化
-       
-                    # E1 = abs(img[v,u] - img[tuple(seeds[0])])
                     E2 = gau * abs(img[v,u] - img[tuple(seeds[0])])
                     E3 = img[v,u] < 60
-                    # E4 = abs(stats.chisquare(responses[:,v,u], responses[:,y,x])[0])
-                    # E5 = dis[texton_map[v,u], texton_map[y,x]] # cluster間の距離
-                    # E6 = img[v,u] < img[y,x]
-                    
-                    if E3: # 影領域
+                    E8 = dis[v-1:v+2,u-1:u+2].sum() / 9.
+                    if E2 / E8 < th:
+
                         ror[v,u] = 255
                         seeds.append([v,u])
 
-                    if E2 < th and ed > th2:
+        ## dilateとerodeをする
+        ror = cv2.dilate(ror, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5,5)))
+        ror = cv2.erode(ror, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5,5)))
+
+        return ror
+
+
+    def growing_shade(self, img, seed, gauimg, responses, param, dis):
+        '''
+            args : src          -> img,3ch
+                   ori_seed     -> x,yの順の配列
+            dst  : region_map   -> 領域が255,他が0の1ch画像
+                   masked_img   -> srcにmaskを重ねた画像
+
+            param:      -> 
+        '''
+
+        th = param[2]
+
+        # 準備
+        ror = np.zeros_like(img).astype(np.uint8)
+        ror[seed[0], seed[1]] = 255
+        ror[seed[2], seed[3]] = 255
+        ror[seed[4], seed[5]] = 255
+
+        sy = seed[0]
+        sx = seed[1]
+        seeds = []
+        # seeds.append([seed[2],seed[3]]) # maxを種に
+        seeds.append([seed[4],seed[5]]) # minを種に
+
+        chi1 = 0
+        chi2 = 0
+        count1 = 0
+        count2 = 0
+
+        '''lightとshadeでそれぞれgrowingする'''
+
+        # region growing
+        for i in xrange(100000):
+
+            if i == len(seeds): break # 終了条件
+            if i >= 3000: break # 中断条件
+
+            y, x = seeds[i] # renew seed point
+
+            ## Compare with around pixels
+            for u,v in zip([x,x-1,x+1,x],[y-1,y,y,y+1]):
+              
+                ## 中断条件 : 画像の端か検出済みだったら
+                if u < 0 or u >= img.shape[1] or v < 0 or v >= img.shape[0]: continue
+                elif ror[v,u] != 0: continue
+
+
+
+                else: ## 継続条件
+                    if abs(v - sy) > int(gauimg.shape[0]/2 -1) or abs(u - sx) > int(gauimg.shape[1]/2 -1):
+                        gau = 1.0                
+                    else:
+                        gau = gauimg[int(v-sy+gauimg.shape[0]/2), int(u-sx+gauimg.shape[1]/2)]
+                    
+                    ''' 領域拡張条件 ''' ## v,u -> 拡張先 y,x -> 今いるseed seed[2],seed[3] -> もともとのseed
+                    E2 = gau * abs(img[v,u] - img[tuple(seeds[0])])
+                    E3 = img[v,u] < 60
+                    E8 = dis[v-1:v+2,u-1:u+2].sum() / 9.
+                    if E2 / E8 < th:                    # E3 = 
                         ror[v,u] = 255
                         seeds.append([v,u])
 
@@ -449,18 +549,42 @@ class RegionGrowing():
 
 if __name__ == '__main__':
 
-    # get image
-    img = cv2.imread('../../../data/g-t_data/resized/spirit118-1.png')
+
+    # filename = 'spirit006-1.png'
+    filename = 'spirit118-1.png'
+
+    img = cv2.imread('../../../data/g-t_data/resized/{}'.format(filename))
+    # img = cv2.imread('../../../data/test_image/sample/image3.png')
+    # img = cv2.resize(img,(500,500))
+    true_ror = cv2.imread('../../../data/g-t_data/label/{}'.format(filename),0)
+    print 'Target image : {}'.format(filename)
 
     ## Main processing
     ror, seed_img = main(img, param=None)
 
     ## Draw result 
     b,g,r = cv2.split((img*0.8).astype(np.uint8))
+    # b,g,r = cv2.split(img)
     r[ror == 255] = 255
-    g[ror == 200] = 255
-    b[seed_img != 0] = 255
+    # g[true_ror == 255] = 200
+    # b[seed_img != 0] = 255
     res = cv2.merge((b,g,r))
 
     cv2.imshow('res',res)
+    plt.pause(1)
     cv2.waitKey(-1)
+
+
+
+    # chi = stats.chisquare(responses[:,v,u], responses[:,seed[2],seed[3]])[0]
+    # ed = np.linalg.norm(responses[:,v,u] - responses[:, y, x], ord=None) # ordは正規化
+    # E1 = abs(img[v,u] - img[tuple(seeds[0])])
+    # E4 = abs(stats.chisquare(responses[:,v,u], responses[:,y,x])[0])
+    # E5 = dis[texton_map[v,u], texton_map[y,x]] # cluster間の距離
+    # E6 = img[v,u] < img[y,x]
+    # E7 = dis[v,u]
+    
+    # if E2 < th and ed > th2:
+    # print E2 / dis[v,u]
+    # if 1. * E2 / dis[v,u] < th:
+    # if E2 < 0.04:
